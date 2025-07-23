@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Marvin AI Client Module - FINAL FIX v3.3
+# Marvin AI Client Module - FINAL FIX v3.4
 # "Un parser che FINALMENTE capisce i blocchi invece di fare un disastro"
 
 AI_TEMP_DIR="$MARVIN_HOME/temp"
@@ -68,98 +68,61 @@ extract_ai_response() {
     esac
 }
 
-# Parser CORRETTO che gestisce BLOCCHI, non righe singole
+# <<< FIX: Funzione parser completamente riscritta per essere robusta
 parse_ai_commands() {
     local ai_response="$1"
     local commands_file="$AI_TEMP_DIR/commands.txt"
     
-    > "$commands_file"
-    echo "🤖 Marvin: \"Parser CORRETTO per blocchi...\""
+    > "$commands_file" # Svuota il file dei comandi
+    echo "🤖 Marvin: \"Parser a stato singolo attivato...\""
     
-    # Salva la risposta per debug
+    # Salva la risposta completa per debug
     echo "$ai_response" > "$AI_TEMP_DIR/ai_response.txt"
-    
-    # Parser SED che estrae i blocchi completi
+
+    # Estrae solo i blocchi MARVIN_ACTION
+    local blocks=$(echo "$ai_response" | sed -n '/MARVIN_ACTION:/,/MARVIN_END/p')
+
+    local in_block=false
+    local action_type=""
+    local file_path=""
+    local content=""
     local block_count=0
-    
-    # Usa sed per estrarre blocchi tra MARVIN_ACTION e MARVIN_END
-    echo "$ai_response" | sed -n '/MARVIN_ACTION:/,/MARVIN_END/p' | \
+
+    # Legge i blocchi riga per riga con un singolo ciclo
     while IFS= read -r line; do
-        if [[ "$line" =~ ^MARVIN_ACTION: ]]; then
-            # Inizio nuovo blocco
-            action_line="$line"
-            content=""
-            
-            # Leggi tutte le righe fino a MARVIN_END
-            while IFS= read -r content_line; do
-                if [[ "$content_line" =~ ^MARVIN_END ]]; then
-                    # Fine blocco - salva
-                    if [[ "$action_line" =~ MARVIN_ACTION:(CREATE|UPDATE|RUN):(.+) ]]; then
-                        action_type="${BASH_REMATCH[1]}"
-                        file_path="${BASH_REMATCH[2]}"
-                        
-                        # Salva nel file comandi con separatore sicuro
-                        echo "${action_type}|||${file_path}|||${content}" >> "$commands_file"
-                        ((block_count++))
-                    fi
-                    break
-                else
-                    # Aggiungi riga al contenuto
-                    if [ -z "$content" ]; then
-                        content="$content_line"
-                    else
-                        content="$content"$'\n'"$content_line"
-                    fi
-                fi
-            done
-        fi
-    done
-    
-    # Se sed non funziona, usa parser grep + awk semplificato
-    if [ ! -s "$commands_file" ]; then
-        echo "🔧 Fallback parser..."
-        
-        # Estrai ogni blocco manualmente
-        grep -n "MARVIN_ACTION:\|MARVIN_END" "$AI_TEMP_DIR/ai_response.txt" > "$AI_TEMP_DIR/markers.txt"
-        
-        # Processa i marker per estrarre blocchi
-        while read -r marker; do
-            local line_num=$(echo "$marker" | cut -d: -f1)
-            local content=$(echo "$marker" | cut -d: -f2-)
-            
-            if [[ "$content" =~ MARVIN_ACTION:(CREATE|UPDATE|RUN):(.+) ]]; then
-                local action_type="${BASH_REMATCH[1]}"
-                local file_path="${BASH_REMATCH[2]}"
-                local start_line=$((line_num + 1))
-                
-                # Trova la riga di fine
-                local end_line=$(grep -n "MARVIN_END" "$AI_TEMP_DIR/ai_response.txt" | \
-                               awk -F: -v start="$line_num" '$1 > start {print $1; exit}')
-                
-                if [ ! -z "$end_line" ]; then
-                    local block_content=$(sed -n "${start_line},$((end_line-1))p" "$AI_TEMP_DIR/ai_response.txt")
-                    echo "${action_type}|||${file_path}|||${block_content}" >> "$commands_file"
-                    ((block_count++))
-                fi
+        if [[ "$line" =~ ^MARVIN_ACTION:(CREATE|UPDATE|RUN):(.+) ]]; then
+            # Se eravamo già in un blocco, è un errore, ma lo ignoriamo e partiamo da capo
+            action_type="${BASH_REMATCH[1]}"
+            file_path="${BASH_REMATCH[2]}"
+            content="" # Resetta il contenuto per il nuovo blocco
+            in_block=true
+        elif [[ "$line" =~ ^MARVIN_END ]]; then
+            if [[ "$in_block" == "true" ]]; then
+                # Fine del blocco, salviamo il comando
+                local encoded_content=$(echo -n "$content" | base64 -w 0)
+                echo "${action_type}|||${file_path}|||${encoded_content}" >> "$commands_file"
+                ((block_count++))
+                in_block=false # Usciamo dallo stato "dentro un blocco"
             fi
-        done < "$AI_TEMP_DIR/markers.txt"
-        
-        rm -f "$AI_TEMP_DIR/markers.txt"
-    fi
-    
-    if [ -s "$commands_file" ]; then
-        local cmd_count=$(wc -l < "$commands_file")
-        echo "🔍 Marvin ha trovato $cmd_count blocchi (non 83 righe stupide!)"
+        elif [[ "$in_block" == "true" ]]; then
+            # Siamo dentro un blocco, accumuliamo il contenuto
+            if [ -z "$content" ]; then
+                content="$line"
+            else
+                content="$content"$'\n'"$line"
+            fi
+        fi
+    done <<< "$blocks" # Alimenta il ciclo con i blocchi estratti
+
+    if [ "$block_count" -gt 0 ]; then
+        echo "🔍 Marvin ha trovato e parsato correttamente $block_count blocco/i."
         return 0
     else
-        echo "⚠️ Nessun blocco MARVIN_ACTION trovato"
-        echo "🔧 Debug: pattern nella risposta:"
-        grep -c "MARVIN_ACTION" "$AI_TEMP_DIR/ai_response.txt" || echo "0"
+        echo "⚠️ Nessun blocco MARVIN_ACTION valido trovato."
         return 1
     fi
 }
 
-# Esecuzione invariata - funziona già correttamente
 execute_ai_commands() {
     local commands_file="$AI_TEMP_DIR/commands.txt"
     
@@ -171,7 +134,16 @@ execute_ai_commands() {
     echo "🚀 Marvin: \"Eseguendo blocchi REALI...\""
     
     local executed_count=0
-    while IFS='|||' read -r action_type file_path content; do
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        action_type="${line%%|||*}"
+        rest="${line#*|||}"
+        file_path="${rest%%|||*}"
+        encoded_content="${rest#*|||}" # Questo è il contenuto codificato
+
+        # <<< FIX: Aggiunta la decodifica Base64 prima di qualsiasi azione
+        content=$(echo "$encoded_content" | base64 -d)
+
         echo "🔧 Eseguendo: $action_type su $file_path"
         
         case "$action_type" in
@@ -187,31 +159,33 @@ execute_ai_commands() {
                     echo "📁 Creata directory: $dir_path"
                 fi
                 
+                # Ora usiamo il contenuto decodificato
                 if [ -z "$content" ]; then
-                    echo "⚠️ Contenuto vuoto per $file_path"
+                    echo "⚠️ Contenuto vuoto per $file_path (dopo decodifica), saltando"
                     continue
                 fi
                 
-                echo "$content" > "$file_path"
+                echo -n "$content" > "$file_path" # Usiamo echo -n per evitare una newline extra
                 local lines=$(echo "$content" | wc -l)
                 echo "📝 Marvin ha scritto: $file_path ($lines righe)"
                 
                 if [ -s "$file_path" ]; then
-                    echo "✅ File $file_path creato con successo"
+                    echo "✅ File $file_path creato/aggiornato con successo"
                 else
-                    echo "❌ ERRORE: File $file_path vuoto!"
+                    echo "❌ ERRORE: File $file_path è vuoto dopo la scrittura!"
                 fi
                 
                 executed_count=$((executed_count + 1))
                 ;;
                 
             "RUN")
+                # Il contenuto di RUN non è codificato, usiamo direttamente file_path
                 echo "🔧 Marvin esegue: $file_path"
-                if echo "$file_path" | grep -E "^(npm|yarn|git|mkdir|touch|echo)" > /dev/null; then
+                if echo "$file_path" | grep -Eq "^(npm|yarn|git|mkdir|touch|echo|npx|cd)"; then
                     eval "$file_path"
                     executed_count=$((executed_count + 1))
                 else
-                    echo "⚠️ Comando non sicuro ignorato"
+                    echo "⚠️ Comando non sicuro ignorato: $file_path"
                 fi
                 ;;
         esac
@@ -284,4 +258,4 @@ check_api_config() {
     esac
 }
 
-echo "🤖 Marvin AI Module v3.3 FINAL: \"Parser che capisce i blocchi, finalmente!\""
+echo "🤖 Marvin AI Module v3.4 FINAL: \"Parser che capisce i blocchi, finalmente!\""
