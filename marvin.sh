@@ -106,11 +106,21 @@ call_ai() {
 
 extract_ai_response() {
     local provider="$1" api_response="$2"
+    
+
     case "$provider" in
-        "claude") echo "$api_response" | jq -r '.content[0].text // empty' 2>/dev/null ;;
-        "openai"|"groq"|"azure") echo "$api_response" | jq -r '.choices[0].message.content // empty' 2>/dev/null ;;
-        "ollama") echo "$api_response" | jq -r '.response // empty' 2>/dev/null ;;
-        *) echo "" ;;
+        "claude") 
+            echo "$api_response" | jq -r '.content[0].text // empty' 2>/dev/null 
+            ;;
+        "openai"|"groq"|"azure") 
+            echo "$api_response" | jq -r '.choices[0].message.content // empty' 2>/dev/null 
+            ;;
+        "ollama") 
+            echo "$api_response" | jq -r '.response // empty' 2>/dev/null 
+            ;;
+        *) 
+            echo "" 
+            ;;
     esac
 }
 
@@ -446,6 +456,11 @@ command_chat() {
                 
                 if [ -z "$ai_text" ]; then
                     echo "❌ Errore nella comunicazione con l'AI"
+                    echo "🔍 Debug info salvato in /tmp/marvin_debug.log"
+                    echo "📋 Risposta API ricevuta:"
+                    echo "$api_response" | head -5
+                    echo ""
+                    echo "💡 Verifica la configurazione con: bash ~/.marvin/utilities.sh check"
                     continue
                 fi
                 
