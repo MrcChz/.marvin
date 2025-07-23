@@ -1,2 +1,3 @@
 config.json
-temp/*
+config.json.backup
+temp/.

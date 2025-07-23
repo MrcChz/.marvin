@@ -1,0 +1,18 @@
+Certo! Cambio l'applicazione in rosso.
+
+MARVIN_ACTION:UPDATE:src/test.css
+body {
+  background-color: red;
+  color: white;
+}
+MARVIN_END
+
+MARVIN_ACTION:UPDATE:src/App.jsx
+import React from 'react';
+
+export default function App() {
+  return <div>Test rosso</div>;
+}
+MARVIN_END
+
+Ecco fatto!

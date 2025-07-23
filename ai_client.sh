@@ -1,49 +1,62 @@
 #!/bin/bash
 
-# Marvin AI Client Module - FINAL FIX v3.4
-# "Un parser che FINALMENTE capisce i blocchi invece di fare un disastro"
+# Marvin AI Client Module - STRUCTURED WORKFLOW v7.0
+# "Un assistente con un workflow professionale: prima 'new', poi 'chat'."
+
+# --- CONFIGURAZIONE E SETUP INIZIALE ---
+if [ -z "$MARVIN_HOME" ]; then
+    echo "❌ ERRORE CRITICO: La variabile d'ambiente MARVIN_HOME non è impostata."
+    echo "   Per risolvere, esegui questi comandi e poi riprova:"
+    echo '   echo '\''export MARVIN_HOME="$HOME/.marvin"'\'' >> ~/.bashrc'
+    echo '   source ~/.bashrc'
+    exit 1
+fi
 
 AI_TEMP_DIR="$MARVIN_HOME/temp"
+MEMORY_DIR=".marvin_memory"
 mkdir -p "$AI_TEMP_DIR"
 
-# [Funzioni API - rimangono identiche]
+# --- LIBRERIA DI FUNZIONI (API, Parser, Esecutore, Memoria) ---
+
+# --- FUNZIONI API ---
+
 call_claude_api() {
     local message="$1"; local config_file="$2"
     local api_key=$(jq -r '.ai_providers.claude.api_key' "$config_file")
     local model=$(jq -r '.ai_providers.claude.model' "$config_file")
-    local payload=$(jq -n --arg model "$model" --arg message "$message" '{ model: $model, max_tokens: 4096, messages: [{ role: "user", content: $message }] }')
-    curl -s -X POST "https://api.anthropic.com/v1/messages" -H "Content-Type: application/json" -H "x-api-key: $api_key" -H "anthropic-version: 2023-06-01" -d "$payload" 2>/dev/null
+    local payload=$(jq -n --arg model "$model" --arg message "$message" '{ "model": $model, "max_tokens": 4096, "messages": [{ "role": "user", "content": $message }] }')
+    curl -s -X POST "https://api.anthropic.com/v1/messages" -H "Content-Type: application/json" -H "x-api-key: $api_key" -H "anthropic-version: 2023-06-01" -d "$payload"
 }
 
 call_openai_api() {
     local message="$1"; local config_file="$2"
     local api_key=$(jq -r '.ai_providers.openai.api_key' "$config_file")
     local model=$(jq -r '.ai_providers.openai.model' "$config_file")
-    local payload=$(jq -n --arg model "$model" --arg message "$message" '{ model: $model, max_tokens: 4096, messages: [{ role: "user", content: $message }] }')
-    curl -s -X POST "https://api.openai.com/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d "$payload" 2>/dev/null  
+    local payload=$(jq -n --arg model "$model" --arg message "$message" '{ "model": $model, "max_tokens": 4096, "messages": [{ "role": "user", "content": $message }] }')
+    curl -s -X POST "https://api.openai.com/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d "$payload"
 }
 
 call_groq_api() {
     local message="$1"; local config_file="$2"
     local api_key=$(jq -r '.ai_providers.groq.api_key' "$config_file")
     local model=$(jq -r '.ai_providers.groq.model' "$config_file")
-    local payload=$(jq -n --arg model "$model" --arg message "$message" '{ model: $model, max_tokens: 4096, messages: [{ role: "user", content: $message }] }')
-    curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d "$payload" 2>/dev/null
+    local payload=$(jq -n --arg model "$model" --arg message "$message" '{ "model": $model, "max_tokens": 4096, "messages": [{ "role": "user", "content": $message }] }')
+    curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d "$payload"
+}
+
+call_ollama_api() {
+    local message="$1"; local config_file="$2"
+    local model=$(jq -r '.ai_providers.ollama.model' "$config_file")
+    local payload=$(jq -n --arg model "$model" --arg message "$message" '{ "model": $model, "prompt": $message, "stream": false }')
+    curl -s -X POST "http://localhost:11434/api/generate" -H "Content-Type: application/json" -d "$payload"
 }
 
 call_azure_api() {
     local message="$1"; local config_file="$2"
     local api_key=$(jq -r '.ai_providers.azure.api_key' "$config_file")
     local api_url=$(jq -r '.ai_providers.azure.api_url' "$config_file")
-    local payload=$(jq -n --arg message "$message" '{ max_tokens: 4096, messages: [{ role: "user", content: $message }] }')
-    curl -s -X POST "$api_url" -H "Content-Type: application/json" -H "api-key: $api_key" -d "$payload" 2>/dev/null
-}
-
-call_ollama_api() {
-    local message="$1"; local config_file="$2"
-    local model=$(jq -r '.ai_providers.ollama.model' "$config_file")
-    local payload=$(jq -n --arg model "$model" --arg message "$message" '{ model: $model, prompt: $message, stream: false }')
-    curl -s -X POST "http://localhost:11434/api/generate" -H "Content-Type: application/json" -d "$payload" 2>/dev/null
+    local payload=$(jq -n --arg message "$message" '{ "max_tokens": 4096, "messages": [{ "role": "user", "content": $message }] }')
+    curl -s -X POST "$api_url" -H "Content-Type: application/json" -H "api-key: $api_key" -d "$payload"
 }
 
 call_ai() {
@@ -68,194 +81,158 @@ extract_ai_response() {
     esac
 }
 
-# <<< FIX: Funzione parser completamente riscritta per essere robusta
+# --- PARSER ED ESECUTORE ---
+
 parse_ai_commands() {
-    local ai_response="$1"
-    local commands_file="$AI_TEMP_DIR/commands.txt"
-    
-    > "$commands_file" # Svuota il file dei comandi
+    local ai_response="$1"; local commands_file="$AI_TEMP_DIR/commands.txt"; > "$commands_file"
     echo "🤖 Marvin: \"Parser a stato singolo attivato...\""
-    
-    # Salva la risposta completa per debug
-    echo "$ai_response" > "$AI_TEMP_DIR/ai_response.txt"
-
-    # Estrae solo i blocchi MARVIN_ACTION
     local blocks=$(echo "$ai_response" | sed -n '/MARVIN_ACTION:/,/MARVIN_END/p')
-
-    local in_block=false
-    local action_type=""
-    local file_path=""
-    local content=""
-    local block_count=0
-
-    # Legge i blocchi riga per riga con un singolo ciclo
+    local in_block=false; local action_type=""; local file_path=""; local content=""; local block_count=0
     while IFS= read -r line; do
         if [[ "$line" =~ ^MARVIN_ACTION:(CREATE|UPDATE|RUN):(.+) ]]; then
-            # Se eravamo già in un blocco, è un errore, ma lo ignoriamo e partiamo da capo
-            action_type="${BASH_REMATCH[1]}"
-            file_path="${BASH_REMATCH[2]}"
-            content="" # Resetta il contenuto per il nuovo blocco
-            in_block=true
+            action_type="${BASH_REMATCH[1]}"; file_path="${BASH_REMATCH[2]}"; content=""; in_block=true
         elif [[ "$line" =~ ^MARVIN_END ]]; then
             if [[ "$in_block" == "true" ]]; then
-                # Fine del blocco, salviamo il comando
                 local encoded_content=$(echo -n "$content" | base64 -w 0)
-                echo "${action_type}|||${file_path}|||${encoded_content}" >> "$commands_file"
-                ((block_count++))
-                in_block=false # Usciamo dallo stato "dentro un blocco"
+                echo "${action_type}|||${file_path}|||${encoded_content}" >> "$commands_file"; ((block_count++)); in_block=false
             fi
         elif [[ "$in_block" == "true" ]]; then
-            # Siamo dentro un blocco, accumuliamo il contenuto
-            if [ -z "$content" ]; then
-                content="$line"
-            else
-                content="$content"$'\n'"$line"
-            fi
+            if [ -z "$content" ]; then content="$line"; else content="$content"$'\n'"$line"; fi
         fi
-    done <<< "$blocks" # Alimenta il ciclo con i blocchi estratti
-
-    if [ "$block_count" -gt 0 ]; then
-        echo "🔍 Marvin ha trovato e parsato correttamente $block_count blocco/i."
-        return 0
-    else
-        echo "⚠️ Nessun blocco MARVIN_ACTION valido trovato."
-        return 1
-    fi
+    done <<< "$blocks"
+    if [ "$block_count" -gt 0 ]; then echo "🔍 Marvin ha trovato e parsato $block_count blocco/i."; return 0;
+    else echo "⚠️ Nessun blocco MARVIN_ACTION valido trovato."; return 1; fi
 }
 
 execute_ai_commands() {
-    local commands_file="$AI_TEMP_DIR/commands.txt"
-    
-    if [ ! -f "$commands_file" ] || [ ! -s "$commands_file" ]; then
-        echo "⚠️ Nessun comando da eseguire"
-        return 1
-    fi
-    
-    echo "🚀 Marvin: \"Eseguendo blocchi REALI...\""
-    
-    local executed_count=0
-
+    local commands_file="$1"; if [ ! -s "$commands_file" ]; then return 1; fi
+    echo "🚀 Marvin: \"Eseguendo blocchi REALI...\""; local executed_count=0
     while IFS= read -r line || [[ -n "$line" ]]; do
-        action_type="${line%%|||*}"
-        rest="${line#*|||}"
-        file_path="${rest%%|||*}"
-        encoded_content="${rest#*|||}" # Questo è il contenuto codificato
-
-        # <<< FIX: Aggiunta la decodifica Base64 prima di qualsiasi azione
+        action_type="${line%%|||*}"; rest="${line#*|||}"; file_path="${rest%%|||*}"; encoded_content="${rest#*|||}"
         content=$(echo "$encoded_content" | base64 -d)
-
-        echo "🔧 Eseguendo: $action_type su $file_path"
-        
         case "$action_type" in
             "CREATE"|"UPDATE")
-                if [ -z "$file_path" ] || [ "$file_path" = " " ]; then
-                    echo "❌ File path vuoto, saltando..."
-                    continue
-                fi
-                
-                local dir_path=$(dirname "$file_path")
-                if [ "$dir_path" != "." ] && [ ! -d "$dir_path" ]; then
-                    mkdir -p "$dir_path"
-                    echo "📁 Creata directory: $dir_path"
-                fi
-                
-                # Ora usiamo il contenuto decodificato
-                if [ -z "$content" ]; then
-                    echo "⚠️ Contenuto vuoto per $file_path (dopo decodifica), saltando"
-                    continue
-                fi
-                
-                echo -n "$content" > "$file_path" # Usiamo echo -n per evitare una newline extra
-                local lines=$(echo "$content" | wc -l)
-                echo "📝 Marvin ha scritto: $file_path ($lines righe)"
-                
-                if [ -s "$file_path" ]; then
-                    echo "✅ File $file_path creato/aggiornato con successo"
-                else
-                    echo "❌ ERRORE: File $file_path è vuoto dopo la scrittura!"
-                fi
-                
-                executed_count=$((executed_count + 1))
-                ;;
-                
+                echo "🔧 $action_type: $file_path"; if [ -z "$file_path" ]; then continue; fi
+                local dir_path=$(dirname "$file_path"); if [ ! -d "$dir_path" ] && [ "$dir_path" != "." ]; then mkdir -p "$dir_path"; fi
+                echo -n "$content" > "$file_path"; ((executed_count++)) ;;
             "RUN")
-                # Il contenuto di RUN non è codificato, usiamo direttamente file_path
-                echo "🔧 Marvin esegue: $file_path"
+                echo "🔧 RUN: $file_path"
                 if echo "$file_path" | grep -Eq "^(npm|yarn|git|mkdir|touch|echo|npx|cd)"; then
-                    eval "$file_path"
-                    executed_count=$((executed_count + 1))
-                else
-                    echo "⚠️ Comando non sicuro ignorato: $file_path"
-                fi
-                ;;
+                    (eval "$file_path"); ((executed_count++))
+                else echo "⚠️ Comando non sicuro ignorato"; fi ;;
         esac
-    done < "$commands_file"
-    
-    echo "✅ Marvin ha eseguito $executed_count azioni REALI"
-    
-    rm -f "$commands_file" "$AI_TEMP_DIR/ai_response.txt"
-    return $executed_count
+    done < "$commands_file"; echo "✅ Marvin ha eseguito $executed_count azioni REALI"
 }
 
-# Tracking functions rimangono invariate
-track_user_request() {
-    local user_request="$1"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local session_log="$AI_TEMP_DIR/session.log"
-    echo "[$timestamp] USER: $user_request" >> "$session_log"
-    echo "🕒 Richiesta tracciata: $(echo "$user_request" | cut -c1-50)..."
+# --- GESTIONE MEMORIA ---
+
+build_full_prompt() {
+    local user_request="$1"; local config_file="$2"
+    local system_prompt=$(jq -r '.system_prompt' "$config_file")
+    local state_context=$(cat "$MEMORY_DIR/state.md" 2>/dev/null)
+    local decisions_context=$(cat "$MEMORY_DIR/decisions.md" 2>/dev/null)
+    local session_history=$(tail -n 10 "$MEMORY_DIR/session.log" 2>/dev/null)
+    local file_structure=$(ls -R | grep -v 'node_modules\|dist\|.git\|.marvin_memory' 2>/dev/null)
+    local full_prompt="${system_prompt}\n\n--- MEMORIA PROGETTO: STATO ---\n${state_context}\n\n--- MEMORIA PROGETTO: DECISIONI ---\n${decisions_context}\n\n--- STORICO SESSIONE ---\n${session_history}\n\n--- STRUTTURA FILE ---\n${file_structure}\n\n--- RICHIESTA UTENTE ---\n${user_request}"
+    echo "$full_prompt"
 }
 
-track_ai_actions() {
-    local ai_response="$1"
-    local executed_count="$2"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local session_log="$AI_TEMP_DIR/session.log"
-    echo "[$timestamp] AI_ACTIONS: Eseguiti $executed_count comandi" >> "$session_log"
-    
-    if [ -d ".marvin/vibes" ]; then
-        echo "" >> ".marvin/vibes/decisions.md"
-        echo "- **$timestamp**: Marvin ha eseguito $executed_count modifiche automatiche" >> ".marvin/vibes/decisions.md"
+update_session_log() {
+    echo "USER: $1" >> "$MEMORY_DIR/session.log"; echo "AI: $(echo "$2" | head -n 5)" >> "$MEMORY_DIR/session.log"
+}
+
+# --- GESTORI DI COMANDI SPECIFICI (Application Logic) ---
+
+handle_new_project() {
+    local project_name="$1"
+    if [ -z "$project_name" ]; then
+        echo "❌ ERRORE: Nome del progetto mancante."
+        echo "   Uso: marvin new <nome-progetto>"
+        return 1
     fi
+    if [ -d "$project_name" ]; then
+        echo "❌ ERRORE: La cartella '$project_name' esiste già."
+        return 1
+    fi
+
+    echo "🚀 Creando il nuovo progetto Marvin: $project_name..."
+    mkdir "$project_name"
+    
+    # Inizializza la memoria dentro la nuova cartella
+    local project_memory_dir="$project_name/$MEMORY_DIR"
+    mkdir "$project_memory_dir"
+    echo -e "# Stato del Progetto\n\n## Stack\nNon ancora definito.\n\n## Scopo\nNon ancora definito." > "$project_memory_dir/state.md"
+    echo -e "# Log delle Decisioni\n\n*Nessuna decisione importante ancora presa.*" > "$project_memory_dir/decisions.md"
+    > "$project_memory_dir/session.log"
+
+    echo -e "\n✅ Progetto '$project_name' creato con successo!"
+    echo "🧠 La memoria di Marvin è stata inizializzata al suo interno."
+    echo -e "\nProssimi passi:"
+    echo "1. \`cd $project_name\`"
+    echo "2. \`marvin chat\`"
 }
 
-auto_update_context() {
-    local ai_response="$1"
-    local project_dir="$2"
-    local user_request="$3"
-    local context_dir="$project_dir/.marvin/vibes"
+handle_chat_session() {
+    # Controlla se siamo in un progetto Marvin
+    if [ ! -d "$MEMORY_DIR" ]; then
+        echo "❌ ERRORE: Non sei all'interno di un progetto Marvin."
+        echo "   Per iniziare, crea un nuovo progetto con \`marvin new <nome-progetto>\`"
+        echo "   e poi entra nella sua cartella con \`cd <nome-progetto>\`."
+        return 1
+    fi
+
+    CONFIG_FILE="$MARVIN_HOME/config.json"
+    if [ ! -f "$CONFIG_FILE" ]; then echo "❌ ERRORE: File di configurazione non trovato."; return 1; fi
+    local provider=$(jq -r '.default_ai' "$CONFIG_FILE")
     
-    if [ -d "$context_dir" ]; then
-        local timestamp=$(date '+%Y-%m-%d %H:%M')
-        echo "" >> "$context_dir/state.md"
-        echo "## Marvin Auto-update $timestamp" >> "$context_dir/state.md"
-        echo "**Richiesta**: $user_request" >> "$context_dir/state.md"
-        
-        local action_count=$(echo "$ai_response" | grep -c "MARVIN_ACTION:")
-        echo "**Azioni eseguite**: $action_count modifiche automatiche" >> "$context_dir/state.md"
-        
-        local modified_files=$(echo "$ai_response" | grep "MARVIN_ACTION:" | sed 's/.*:\(.*\)/\1/' | head -5)
-        if [ ! -z "$modified_files" ]; then
-            echo "**File modificati**:" >> "$context_dir/state.md"
-            echo "$modified_files" | while read file; do
-                echo "- $file" >> "$context_dir/state.md"
-            done
+    echo -e "\n==================================\n🤖 Chat con Memoria con Marvin ($provider)\n=================================="
+    echo "🤖 Marvin: \"Memoria progetto caricata. Cosa costruiamo (o distruggiamo) oggi?\""
+
+    while true; do
+        read -p "Tu: " user_request
+        if [[ "$user_request" == "quit" ]]; then echo "🤖 Marvin: \"A dopo.\""; break; fi
+        if [[ -z "$user_request" ]]; then continue; fi
+
+        echo "🤖 Marvin ($provider) sta elaborando..."
+        local full_prompt=$(build_full_prompt "$user_request" "$CONFIG_FILE")
+        local api_response=$(call_ai "$provider" "$full_prompt" "$CONFIG_FILE")
+        local ai_text=$(extract_ai_response "$provider" "$api_response")
+
+        update_session_log "$user_request" "$ai_text"
+        echo -e "\n🤖 Marvin:\n$ai_text\n"
+
+        local commands_file="$AI_TEMP_DIR/commands.txt"
+        if parse_ai_commands "$ai_text"; then
+            execute_ai_commands "$commands_file"
         fi
-        
-        echo "# Marvin: \"Modifiche tracciate automaticamente.\"" >> "$context_dir/state.md"
-        echo "🔄 Contesto aggiornato automaticamente"
-    fi
+        echo -e "✅ Marvin: \"Implementazione completata.\"\n"
+    done
 }
 
-check_api_config() {
-    local provider="$1"; local config_file="$2"
-    case "$provider" in
-        "ollama") curl -s --max-time 2 http://localhost:11434/api/tags > /dev/null 2>&1 ;;
-        *) 
-            local api_key=$(jq -r ".ai_providers.$provider.api_key" "$config_file" 2>/dev/null)
-            [ ! -z "$api_key" ] && [ "$api_key" != "null" ] && [ "$api_key" != "" ]
-            ;;
-    esac
-}
 
-echo "🤖 Marvin AI Module v3.4 FINAL: \"Parser che capisce i blocchi, finalmente!\""
+# --- PUNTO DI INGRESSO DELLO SCRIPT (DISPATCHER) ---
+# Legge il primo argomento e decide quale gestore di comandi chiamare.
+
+COMMAND="$1"
+ARGUMENT="$2"
+
+case "$COMMAND" in
+    "new")
+        handle_new_project "$ARGUMENT"
+        ;;
+    "chat")
+        handle_chat_session
+        ;;
+    ""|"-h"|"--help")
+        echo "Uso: marvin <comando> [argomenti]"
+        echo ""
+        echo "Comandi disponibili:"
+        echo "  new <nome-progetto>    Crea e inizializza un nuovo progetto Marvin."
+        echo "  chat                   Avvia la sessione di chat interattiva all'interno di un progetto."
+        ;;
+    *)
+        echo "Comando non riconosciuto: '$COMMAND'"
+        echo "Esegui 'marvin --help' per la lista dei comandi."
+        exit 1
+        ;;
+esac
