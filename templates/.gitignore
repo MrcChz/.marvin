@@ -1,0 +1,27 @@
+# OS files
+.DS_Store
+.Spotlight-V100
+.Trashes
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+logs/
+
+# Dependencies
+node_modules/
+__pycache__/
+env/
+venv/
+
+# Environment
+.env
+.env.local
+
+# Data files
+/data/*.json
