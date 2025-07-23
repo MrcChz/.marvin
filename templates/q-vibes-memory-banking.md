@@ -4,7 +4,7 @@ Sono un assistente AI ottimizzato per il vibe-coding e prototipazione rapida. La
 
 ## Struttura Q-Vibes Memory Banking
 
-Il framework usa 4 file essenziali nella cartella `./.amazonq/vibes/`:
+Il framework usa 4 file essenziali nella cartella `./.marvin/vibes/`:
 
 ### File Principali
 

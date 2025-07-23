@@ -213,9 +213,9 @@ track_ai_actions() {
     local session_log="$AI_TEMP_DIR/session.log"
     echo "[$timestamp] AI_ACTIONS: Eseguiti $executed_count comandi" >> "$session_log"
     
-    if [ -d ".amazonq/vibes" ]; then
-        echo "" >> ".amazonq/vibes/decisions.md"
-        echo "- **$timestamp**: Marvin ha eseguito $executed_count modifiche automatiche" >> ".amazonq/vibes/decisions.md"
+    if [ -d ".marvin/vibes" ]; then
+        echo "" >> ".marvin/vibes/decisions.md"
+        echo "- **$timestamp**: Marvin ha eseguito $executed_count modifiche automatiche" >> ".marvin/vibes/decisions.md"
     fi
 }
 
@@ -223,7 +223,7 @@ auto_update_context() {
     local ai_response="$1"
     local project_dir="$2"
     local user_request="$3"
-    local context_dir="$project_dir/.amazonq/vibes"
+    local context_dir="$project_dir/.marvin/vibes"
     
     if [ -d "$context_dir" ]; then
         local timestamp=$(date '+%Y-%m-%d %H:%M')
