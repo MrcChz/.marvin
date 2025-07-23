@@ -1,21 +1,21 @@
 # Stato Attuale
 
 ## Stack
-- **Frontend**: [Tecnologia + librerie chiave]
-- **Backend**: [Tecnologia + framework]
-- **Database**: [Tipo + scelta specifica]
+- **Frontend**: Non ancora definito
+- **Backend**: Non ancora definito
+- **Database**: Non ancora definito
 
 ## Cosa Funziona
-- [Feature 1] ✅
-- [Feature 2] ✅
+- Progetto inizializzato ✅
 
-## Cosa Manca/Rotto
-- [Feature mancante 1] ❌
-- [Bug/problema 1] 🐛
+## Cosa Manca
+- Definizione stack tecnologico ❌
+- Implementazione features ❌
 
 ## Prossimi Passi Immediati
-1. [Task logico successivo]
-2. [Task seguente]
+1. Definire l'idea del progetto
+2. Scegliere lo stack tecnologico
+3. Implementare la struttura base
 
 ## Focus Attuale
-[Su cosa stiamo lavorando ora]
+Inizializzazione progetto

@@ -4,14 +4,14 @@
 [2-3 frasi che descrivono cosa stai costruendo]
 
 ## Criteri di Successo
-- [ ] [Come appare "fatto"?]
+- [ ] [Cosa significa "finito"?]
 - [ ] [Funzionalità chiave che deve funzionare]
-- [ ] [Standard di performance/qualità]
+- [ ] [Standard di qualità/performance]
 
 ## Assunzioni Iniziali
 - [Assunzione chiave 1]
 - [Assunzione chiave 2]
 
 ## Contesto
-- **Perché ora**: [Perché stai costruendo questo?]
-- **Time box**: [Quanto tempo vuoi spendere?]
+- **Perché ora**: [Motivazione per costruire questo]
+- **Time box**: [Quanto tempo vuoi dedicare]

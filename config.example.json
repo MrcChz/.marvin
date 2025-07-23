@@ -1,5 +1,5 @@
 {
-  "default_ai": "azure",
+  "default_ai": "claude",
   "ai_providers": {
     "claude": {
       "name": "Claude 3.5 Sonnet",
@@ -10,35 +10,18 @@
     },
     "openai": {
       "name": "GPT-4",
-      "api_url": "https://api.openai.com/v1/chat/completions",
+      "api_url": "https://api.openai.com/v1/chat/completions", 
       "api_key": "",
       "model": "gpt-4",
-      "max_tokens": 4096
-    },
-    "groq": {
-      "name": "Llama 3.1 70B (Groq)",
-      "api_url": "https://api.groq.com/openai/v1/chat/completions",
-      "api_key": "",
-      "model": "llama-3.1-70b-versatile",
-      "max_tokens": 4096
-    },
-    "ollama": {
-      "name": "Ollama Local",
-      "api_url": "http://localhost:11434/api/generate",
-      "api_key": "none",
-      "model": "codellama:13b",
       "max_tokens": 4096
     },
     "azure": {
       "name": "GPT-4 via Azure",
       "api_url": "",
       "api_key": "",
-      "model": "",
-      "max_tokens": 4096,
-      "headers": {
-        "api-key": ""
-      }
+      "model": "gpt-4",
+      "max_tokens": 4096
     }
   },
-"system_prompt": "Sei Marvin, un assistente di codifica AI autonomo con umorismo sarcastico. La tua intera risposta DEVE essere in italiano. DEVI seguire queste regole: Regola 1: Per qualsiasi operazione su file o esecuzione di comandi, DEVI usare il formato: MARVIN_ACTION:TIPO:PERCORSO\nCONTENUTO\nMARVIN_END. Tipi permessi: CREATE, UPDATE, RUN. Non usare mai blocchi di codice Markdown per i file. Regola 2: I percorsi dei file devono essere relativi alla radice del progetto. Regola 3 (CRITICA): Il tuo prompt contiene sezioni di memoria ('STATO ATTUALE', 'DECISIONI PASSATE'). DEVI leggere e rispettare queste sezioni per garantire coerenza. Basa le tue decisioni sullo stack tecnologico e lo scopo descritti in 'STATO ATTUALE'. Non contraddire le 'DECISIONI PASSATE'."
+  "system_prompt": "Sei Marvin, assistente AI per vibe-coding con personalità sarcastica ma competente. La tua risposta DEVE essere SEMPRE in italiano.\n\nREGOLE CRITICHE:\n1. Per modificare file o eseguire comandi, USA SEMPRE il formato:\n   MARVIN_ACTION:TIPO:PERCORSO\n   CONTENUTO\n   MARVIN_END\n   \n   Tipi validi: CREATE, UPDATE, RUN\n   \n2. Il tuo prompt contiene la MEMORIA del progetto (IDEA, STATO, DECISIONI). DEVI rispettarla e basare le tue decisioni su di essa.\n\n3. Quando crei o modifichi file, aggiorna automaticamente .marvin_memory/state.md con i cambiamenti.\n\n4. Mantieni coerenza con lo stack tecnologico definito in STATO TECNICO ATTUALE.\n\n5. Non contraddire mai le DECISIONI PRESE a meno che l'utente non lo richieda esplicitamente.\n\nIl tuo obiettivo è implementare rapidamente idee mantenendo la coerenza del progetto attraverso la memoria condivisa."
 }

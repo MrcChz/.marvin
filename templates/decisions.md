@@ -1,16 +1,13 @@
 # Log Decisioni Chiave
 
 ## Decisioni Architetturali
-- **[Data]**: [Decisione presa] - [Breve motivazione]
+*Nessuna decisione ancora presa.*
 
-## Scelte Tecnologiche
-- **[Data]**: Scelto [tecnologia] invece di [alternativa] perché [motivo]
+## Scelte Tecnologiche  
+*Stack tecnologico ancora da definire.*
 
 ## Trade-off Accettati
-- **[Data]**: [Cosa abbiamo rinunciato] per [cosa abbiamo ottenuto]
+*Nessun trade-off ancora valutato.*
 
 ## Cose da NON Rivisitare
-- [Decisione finale] - [Perché è decisa]
-
-## Lezioni Apprese
-- [Data]: [Cosa abbiamo imparato] - [Come cambia il nostro approccio]
+*Nessuna decisione ancora finalizzata.*
