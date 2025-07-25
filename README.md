@@ -1,108 +1,53 @@
-# Marvin AI Assistant - Sistema Unificato
+# Marvin AI Assistant - Sistema Unificato v8.0
 
-Un assistente AI per vibe-coding che mantiene memoria del contesto tra sessioni e implementa automaticamente le modifiche.
+Un assistente AI per sviluppo software che mantiene memoria persistente del progetto e implementa automaticamente le modifiche richieste. Progettato per il "vibe-coding" - sessioni di sviluppo fluide e produttive.
 
-*"Non è che io sia pessimista, è solo che tutte le alternative sono peggiori."*
+*"Un assistente che capisce il contesto e implementa automaticamente"*
 
-## Caratteristiche Principali
+## 🚀 Caratteristiche Principali
 
-- **Memoria Persistente**: Mantiene contesto tra sessioni tramite file strutturati
-- **Automazione Completa**: Implementa automaticamente file e comandi
-- **Multi-Provider**: Supporta Claude, OpenAI, Azure
-- **Workflow Rapido**: Ottimizzato per prototipazione veloce
-- **Vibe-Coding**: Progettato per sessioni di coding fluide e creative
+- **Memoria Persistente**: Mantiene contesto completo tra sessioni tramite file strutturati
+- **Automazione Totale**: Implementa automaticamente file, modifiche e comandi
+- **Multi-Provider AI**: Supporta Claude, OpenAI, Groq, Ollama, Azure
+- **Sistema di Decisioni**: Traccia e rispetta decisioni architetturali prese
+- **Context-Aware**: Analizza la memoria del progetto per decisioni coerenti
 
-## Installazione Rapida
+## 📦 Installazione
+
+### Prerequisiti
 
 ```bash
-# 1. Clona o scarica i file del sistema Marvin
-# 2. Esegui il setup
+# Ubuntu/Debian
+sudo apt install jq curl
+
+# macOS
+brew install jq curl
+
+# CentOS/RHEL
+sudo yum install jq curl
+```
+
+### Setup Completo
+
+```bash
+# 1. Scarica i file del sistema
+git clone <repository> marvin-system
+cd marvin-system
+
+# 2. Esegui l'installazione
 bash setup.sh
 
 # 3. Ricarica il terminale
-source ~/.bashrc  # o ~/.zshrc
+source ~/.bashrc  # o ~/.zshrc se usi Zsh
 
-# 4. Configura le API key
-nano ~/.marvin/config.json
-
-# 5. Testa l'installazione
-marvin new my-project
-cd my-project
-marvin chat
+# 4. Verifica installazione
+marvin --help
+which marvin
 ```
 
-## Struttura del Sistema
+### Configurazione API
 
-```
-~/.marvin/                    # Home directory Marvin
-├── config.json              # Configurazione providers AI
-├── templates/                # Template per nuovi progetti
-│   ├── idea.md
-│   ├── vibe.md
-│   ├── state.md
-│   ├── decisions.md
-│   └── .gitignore
-└── temp/                     # Directory temporanea
-
-<progetto>/
-├── .marvin_memory/           # Memoria del progetto
-│   ├── idea.md              # Obiettivi e concept
-│   ├── vibe.md              # Stile collaborazione
-│   ├── state.md             # Stato tecnico attuale
-│   ├── decisions.md         # Log decisioni prese
-│   └── session.log          # Storia conversazioni
-├── src/
-└── ...
-```
-
-## Comandi Principali
-
-### `marvin new <progetto>`
-Crea un nuovo progetto con memoria inizializzata:
-```bash
-marvin new portfolio-website
-cd portfolio-website
-```
-
-### `marvin chat`
-Avvia la sessione interattiva con memoria caricata:
-```bash
-marvin chat
-# Tu: "Crea un'app React con Tailwind"
-# Marvin implementa automaticamente
-```
-
-### `marvin status`
-Mostra lo stato corrente del progetto:
-```bash
-marvin status
-# Visualizza idea, stato, ultima attivit�
-```
-
-## Formato di Automazione
-
-Marvin usa un formato standardizzato per implementare automaticamente:
-
-```
-MARVIN_ACTION:CREATE:src/App.jsx
-import React from 'react';
-export default function App() {
-  return <div>Hello World</div>;
-}
-MARVIN_END
-
-MARVIN_ACTION:RUN:npm install tailwindcss
-MARVIN_END
-```
-
-**Tipi di azione supportati:**
-- `CREATE`: Crea nuovo file
-- `UPDATE`: Modifica file esistente
-- `RUN`: Esegue comando bash
-
-## Configurazione AI Providers
-
-Modifica `~/.marvin/config.json`:
+Modifica `~/.marvin/config.json` con le tue API keys:
 
 ```json
 {
@@ -113,150 +58,410 @@ Modifica `~/.marvin/config.json`:
       "model": "claude-3-5-sonnet-20241022"
     },
     "openai": {
-      "api_key": "sk-your-openai-key-here",
+      "api_key": "sk-your-openai-key-here", 
       "model": "gpt-4"
     },
     "groq": {
       "api_key": "gsk_your-groq-key-here",
       "model": "llama-3.1-70b-versatile"
-    },
-    "ollama": {
-      "api_key": "none",
-      "model": "codellama:13b"
-    },
-    "azure": {
-      "api_url": "https://your-resource.openai.azure.com/openai/deployments/gpt-4/chat/completions?api-version=2024-02-15-preview",
-      "api_key": "your-azure-key-here"
     }
   }
 }
 ```
 
-### Provider Specifici
+## 🏗️ Architettura Sistema
 
-**Groq (Consigliato per velocità):**
-- Registrati su [console.groq.com](https://console.groq.com)
-- API key gratuita con rate limit generoso
-- Velocità di risposta molto alta
-- Modelli: `llama-3.1-70b-versatile`, `mixtral-8x7b-32768`
+```
+~/.marvin/                    # Directory home Marvin
+├── config.json              # Configurazione providers AI
+├── templates/                # Template per nuovi progetti
+│   ├── idea.md              # Template obiettivi
+│   ├── vibe.md              # Template collaborazione
+│   ├── state.md             # Template stato tecnico
+│   ├── decisions.md         # Template decisioni
+│   └── .gitignore           # Template gitignore
+└── temp/                     # Directory operazioni temporanee
 
-**Ollama (Consigliato per privacy):**
-- Installa Ollama dal sito ufficiale
-- Avvia il servizio: `ollama serve`
-- Scarica un modello: `ollama pull codellama:13b`
-- Completamente locale, nessuna API key necessaria
+<tuo-progetto>/
+├── .marvin_memory/           # Memoria specifica del progetto
+│   ├── idea.md              # Obiettivi e concept del progetto
+│   ├── vibe.md              # Preferenze di collaborazione
+│   ├── state.md             # Stato tecnico corrente
+│   ├── decisions.md         # Log delle decisioni prese
+│   └── session.log          # Storia delle conversazioni
+├── src/                      # Il tuo codice
+├── package.json             # Dipendenze
+└── ...                      # Altri file del progetto
+```
 
-## Sistema di Memoria
+## 📋 Comandi Disponibili
 
-### idea.md - La Stella Polare
-- Concept principale del progetto
-- Criteri di successo
-- Contesto e motivazioni
+### `marvin new <nome-progetto>`
 
-### vibe.md - Come Collaborare
-- Preferenze di automazione
-- Stack tecnologico preferito
-- Cosa Marvin decide autonomamente
+Crea un nuovo progetto con memoria inizializzata:
 
-### state.md - Realtà Tecnica
-- Stack e architettura corrente
-- Cosa funziona vs cosa manca
-- Prossimi passi immediati
-
-### decisions.md - Decisioni Prese
-- Scelte architetturali importanti
-- Trade-off accettati
-- Cose da non rivisitare
-
-## Esempi di Utilizzo
-
-### Creazione App React
 ```bash
-marvin new react-dashboard
-cd react-dashboard
+marvin new my-react-app
+cd my-react-app
+```
+
+**Cosa fa:**
+- Crea la directory del progetto
+- Inizializza `.marvin_memory/` con i template
+- Configura `.gitignore` base
+- Prepara il log di sessione
+
+### `marvin chat`
+
+Avvia la sessione interattiva (DEVE essere eseguito nella directory del progetto):
+
+```bash
+cd my-react-app
 marvin chat
 
-Tu: "Crea un dashboard React con dark mode e componenti riutilizzabili"
-# Marvin implementa automaticamente struttura, Tailwind, componenti
+Tu: "Crea un'app React con Tailwind e dark mode"
+# Marvin analizza la memoria e implementa automaticamente
+```
+
+**Funzionalità:**
+- Carica automaticamente tutta la memoria del progetto
+- Analizza la struttura file esistente  
+- Implementa modifiche con formato `MARVIN_ACTION`
+- Aggiorna `state.md` automaticamente
+- Traccia la conversazione in `session.log`
+
+### `marvin status`
+
+Mostra overview dello stato progetto:
+
+```bash
+marvin status
+```
+
+**Output:**
+- Concept principale dall'`idea.md`
+- Stato tecnico da `state.md`
+- Ultime attività da `session.log`
+
+## 🤖 Sistema di Automazione
+
+### Formato MARVIN_ACTION
+
+Marvin implementa automaticamente usando questo formato standardizzato:
+
+```
+MARVIN_ACTION:CREATE:src/components/Button.jsx
+import React from 'react';
+export default function Button({ children, onClick }) {
+  return (
+    <button onClick={onClick} className="px-4 py-2 bg-blue-500 text-white rounded">
+      {children}
+    </button>
+  );
+}
+MARVIN_END
+
+MARVIN_ACTION:UPDATE:package.json
+{
+  "name": "my-react-app",
+  "dependencies": {
+    "react": "^18.0.0",
+    "tailwindcss": "^3.0.0"
+  }
+}
+MARVIN_END
+
+MARVIN_ACTION:RUN:npm install tailwindcss
+MARVIN_END
+```
+
+### Tipi di Azione
+
+- **CREATE**: Crea nuovo file con contenuto completo
+- **UPDATE**: Modifica file esistente (sostituisce tutto il contenuto)
+- **RUN**: Esegue comando bash (solo comandi sicuri: npm, git, mkdir, etc.)
+
+## 🧠 Sistema di Memoria
+
+### idea.md - La Stella Polare
+**Scopo**: Definisce cosa stai costruendo e perché
+
+```markdown
+# Nome Progetto
+
+## Concetto Principale
+Descrizione in 2-3 frasi di cosa stai costruendo
+
+## Criteri di Successo  
+- [ ] Funzionalità core implementata
+- [ ] Performance accettabili
+- [ ] UI/UX soddisfacente
+
+## Contesto
+- **Perché ora**: Motivazione del progetto
+- **Time box**: Tempo dedicato
+```
+
+### vibe.md - Come Collaborare
+**Scopo**: Definisce lo stile di collaborazione e automazione
+
+```markdown
+## Preferenze Tecniche
+- **Frontend**: React + Vite + Tailwind CSS
+- **Backend**: Node.js + Express
+- **Database**: JSON per prototipi, PostgreSQL per produzione
+
+## Livello Automazione
+**ALTO**: Marvin implementa tutto automaticamente senza chiedere conferma
+```
+
+### state.md - Realtà Tecnica
+**Scopo**: Foto istantanea dello stato attuale
+
+```markdown
+## Stack
+- **Frontend**: React 18 + Vite ✅
+- **Styling**: Tailwind CSS ✅  
+- **Backend**: Express API ✅
+
+## Cosa Funziona
+- Struttura base componenti ✅
+- Routing principale ✅
+
+## Cosa Manca
+- Autenticazione utenti ❌
+- Database integration ❌
+
+## Focus Attuale
+Implementazione sistema autenticazione
+```
+
+### decisions.md - Decisioni Prese
+**Scopo**: Traccia le decisioni importanti per evitare backtracking
+
+```markdown
+## Decisioni Architetturali
+- **2024-01-15**: Scelto React invece di Vue per ecosystem più maturo
+- **2024-01-16**: PostgreSQL invece di MongoDB per relazioni complesse
+
+## Cose da NON Rivisitare
+- Framework frontend (React confermato)
+- Struttura database (schema definito)
+```
+
+## 🛠️ Providers AI Supportati
+
+### Claude (Consigliato)
+```json
+{
+  "claude": {
+    "api_key": "sk-ant-your-key-here",
+    "model": "claude-3-5-sonnet-20241022"
+  }
+}
+```
+
+### OpenAI
+```json
+{
+  "openai": {
+    "api_key": "sk-your-openai-key-here",
+    "model": "gpt-4"
+  }
+}
+```
+
+### Groq (Veloce e Gratuito)
+```json
+{
+  "groq": {
+    "api_key": "gsk_your-groq-key-here",
+    "model": "llama-3.1-70b-versatile"
+  }
+}
+```
+
+### Ollama (Completamente Locale)
+```json
+{
+  "ollama": {
+    "api_key": "none",
+    "model": "codellama:13b"
+  }
+}
+```
+
+**Setup Ollama:**
+```bash
+# Installa Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Avvia il servizio
+ollama serve
+
+# Scarica un modello
+ollama pull codellama:13b
+```
+
+### Azure OpenAI
+```json
+{
+  "azure": {
+    "api_url": "https://your-resource.openai.azure.com/openai/deployments/gpt-4/chat/completions?api-version=2024-02-15-preview",
+    "api_key": "your-azure-key-here"
+  }
+}
+```
+
+## 💡 Esempi d'Uso
+
+### Nuovo Progetto React
+```bash
+marvin new portfolio-site
+cd portfolio-site
+marvin chat
+
+Tu: "Crea un portfolio React con dark mode, routing e sezioni About/Projects/Contact"
+# Marvin implementa automaticamente:
+# - Struttura componenti
+# - React Router setup
+# - Tailwind con dark mode
+# - Componenti base per ogni sezione
 ```
 
 ### API Backend
 ```bash
-marvin new api-server
+marvin new api-server  
 cd api-server
 marvin chat
 
-Tu: "Crea un'API Express con autenticazione JWT e database PostgreSQL"
-# Marvin configura Express, middleware, routes, database
+Tu: "Crea API Express con autenticazione JWT, middleware CORS e routes per users/posts"
+# Marvin implementa:
+# - Express server setup
+# - JWT middleware
+# - Database models
+# - Route handlers
+# - Error handling
 ```
 
 ### Sviluppo Iterativo
 ```bash
-# Sessione 1
-Tu: "Inizia con un form di login"
-# Marvin crea componente login base
-
-# Sessione 2 (giorno dopo)
+# Giorno 1
 marvin chat
-Tu: "Aggiungi validazione e gestione errori al form"
-# Marvin ricorda il contesto e migliora il form esistente
+Tu: "Inizia con un form di login basilare"
+
+# Giorno 2  
+marvin chat
+Tu: "Aggiungi validazione client-side e gestione errori"
+# Marvin ricorda il form precedente e lo migliora
 ```
 
-## Workflow Tipico
+## 🔧 Utility di Manutenzione
 
-1. **Inizializzazione**: `marvin new progetto`
-2. **Prima sessione**: Definisci l'idea e lo stack
-3. **Sviluppo iterativo**: Sessioni `marvin chat` con implementazione automatica
-4. **Memoria persistente**: Marvin ricorda tutto tra le sessioni
-5. **Refinement**: Migliora basandosi sulle decisioni passate
+Usa `utilities.sh` per operazioni di manutenzione:
 
-## Vantaggi del Sistema
-
-- **Zero Setup per Progetti**: Memoria e struttura automatiche
-- **Continuità tra Sessioni**: Non perdi mai il contesto
-- **Implementazione Automatica**: Meno copy-paste, più risultati
-- **Decisioni Tracciate**: Storia delle scelte tecniche
-- **Vibe-Coding Ottimizzato**: Flusso naturale e rapido
-
-## Risoluzione Problemi
-
-### Comando non trovato
 ```bash
-# Aggiungi al tuo ~/.bashrc o ~/.zshrc:
-export MARVIN_HOME="$HOME/.marvin"
-alias marvin="/path/to/marvin.sh"
-source ~/.bashrc
+# Verifica configurazione sistema
+bash ~/.marvin/utilities.sh check
+
+# Analizza salute progetto corrente
+bash utilities.sh analyze
+
+# Backup memoria progetto
+bash utilities.sh backup
+
+# Genera report completo
+bash utilities.sh report
 ```
 
-### Errore API
-- Verifica le API key in `~/.marvin/config.json`
-- Controlla la connessione internet
-- Testa con `curl` l'endpoint API
+## 🚨 Risoluzione Problemi
+
+### Comando `marvin` non trovato
+```bash
+# Verifica installazione
+which marvin
+
+# Se non trovato, ricontrolla MARVIN_HOME
+echo $MARVIN_HOME
+
+# Reinstalla se necessario
+cd /path/to/marvin-system
+bash setup.sh
+```
+
+### Errori API
+```bash
+# Testa configurazione
+bash ~/.marvin/utilities.sh check
+
+# Verifica API key in config.json
+nano ~/.marvin/config.json
+
+# Per Ollama, verifica servizio
+curl http://localhost:11434/api/tags
+```
 
 ### Memoria corrotta
 ```bash
-# Ripristina template base
+# Backup attuale
+bash utilities.sh backup
+
+# Reset memoria
 rm -rf .marvin_memory
 marvin new temp-project
-cp temp-project/.marvin_memory/* .marvin_memory/
+cp -r temp-project/.marvin_memory ./
 rm -rf temp-project
 ```
 
-## Dipendenze
+### Performance Lente
+- **Groq**: Più veloce per iterazioni rapide
+- **Ollama**: Zero latency di rete, ma richiede GPU/CPU potenti
+- **Claude**: Migliore qualità ma più lento
 
-- **bash** (4.0+)
-- **jq** (parser JSON)
-- **curl** (chiamate API)
+## 🎯 Best Practices
 
-Installa su Ubuntu/Debian:
+### Definisci Bene l'Idea Iniziale
 ```bash
-sudo apt install jq curl
+marvin chat
+Tu: "Aggiorna idea.md con: app di gestione task personali, criterio successo = gestire 100+ task con filtri avanzati, time box = 2 settimane"
 ```
 
-## Licenza
+### Usa Sessioni Focalizzate
+```bash
+# Sessione 1: Setup base
+Tu: "Setup React + TypeScript + Tailwind con architettura componenti pulita"
+
+# Sessione 2: Feature specifica  
+Tu: "Implementa sistema di autenticazione con JWT"
+
+# Sessione 3: UI polish
+Tu: "Migliora UI con animazioni e responsive design"
+```
+
+### Sfrutta la Memoria
+```bash
+Tu: "Basandoti sulle decisioni precedenti in decisions.md, implementa il sistema di notifiche"
+# Marvin consulterà decisions.md per decisioni coerenti
+```
+
+## ⚡ Vantaggi Chiave
+
+1. **Zero Context Loss**: La memoria persiste tra sessioni
+2. **Implementazione Automatica**: Meno copy-paste, più risultati  
+3. **Decisioni Tracciate**: Non ripeti le stesse valutazioni
+4. **Stack Consistency**: Mantiene coerenza tecnologica
+5. **Rapid Prototyping**: Da idea a prototipo in minuti
+
+## 🔒 Note di Sicurezza
+
+- I comandi `RUN` sono limitati a: `npm`, `yarn`, `git`, `mkdir`, `touch`, `echo`, `npx`, `cd`, `ls`, `cat`
+- Altri comandi vengono ignorati per sicurezza
+- Le API key sono memorizzate in `~/.marvin/config.json` (non commitarlo!)
+
+## 📄 Licenza
 
 Sistema open source per uso personale e professionale.
 
 ---
 
-*"Ovviamente funziona perfettamente. Non che ci fossero alternative."* - Marvin
+*"Ovviamente funziona. Non è che avessi alternative migliori."* - Marvin
