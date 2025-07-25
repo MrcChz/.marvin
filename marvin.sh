@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Marvin AI Client - Sistema Unificato v8.0
+# Marvin AI Client - Sistema Unificato v8.1
 # "Un assistente che capisce il contesto e implementa automaticamente"
 
 # --- CONFIGURAZIONE INIZIALE ---
@@ -106,8 +106,6 @@ call_ai() {
 
 extract_ai_response() {
     local provider="$1" api_response="$2"
-    
-
     case "$provider" in
         "claude") 
             echo "$api_response" | jq -r '.content[0].text // empty' 2>/dev/null 
@@ -122,6 +120,161 @@ extract_ai_response() {
             echo "" 
             ;;
     esac
+}
+
+# --- GESTIONE MEMORIA E ALBERATURA ---
+
+# Funzione per aggiornare l'alberatura del progetto
+update_project_tree() {
+    local tree_file="$PROJECT_MEMORY/tree.md"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    # Genera l'alberatura corrente (escludendo .git, node_modules, etc.)
+    local current_tree=""
+    if command -v tree >/dev/null 2>&1; then
+        current_tree=$(tree -I 'node_modules|.git|dist|build|*.log|.DS_Store' -a 2>/dev/null)
+    else
+        # Fallback con find se tree non è disponibile
+        current_tree=$(find . -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/dist/*' -not -path '*/build/*' -not -name '*.log' -not -name '.DS_Store' | sort | sed 's|^\./||' | awk '{
+            depth = gsub(/\//, "/", $0)
+            indent = ""
+            for(i=0; i<depth; i++) indent = indent "  "
+            filename = $0
+            sub(/.*\//, "", filename)
+            if(filename != "") print indent filename
+        }')
+    fi
+    
+    # Crea o aggiorna il file tree
+    if [ ! -f "$tree_file" ]; then
+        cat > "$tree_file" << EOF
+# Alberatura Progetto
+
+## Struttura Corrente (aggiornata: $timestamp)
+\`\`\`
+$current_tree
+\`\`\`
+
+## Cronologia Modifiche
+*Prima generazione dell'alberatura*
+EOF
+    else
+        # Mantieni storico delle alberature precedenti
+        local old_content=$(cat "$tree_file")
+        local old_tree=$(echo "$old_content" | sed -n '/```/,/```/p' | sed '1d;$d')
+        
+        # Confronta se ci sono modifiche significative
+        if [ "$current_tree" != "$old_tree" ]; then
+            cat > "$tree_file" << EOF
+# Alberatura Progetto
+
+## Struttura Corrente (aggiornata: $timestamp)
+\`\`\`
+$current_tree
+\`\`\`
+
+## Cronologia Modifiche
+
+### $timestamp
+Struttura aggiornata automaticamente
+
+$(echo "$old_content" | sed -n '/## Cronologia Modifiche/,$p' | tail -n +2 | head -20)
+EOF
+        fi
+    fi
+}
+
+# Funzione per gestire rimozione file con tracking
+handle_file_removal() {
+    local file_path="$1"
+    
+    if [ ! -e "$file_path" ]; then
+        echo "⚠️ File non trovato: $file_path"
+        return 1
+    fi
+    
+    echo "🗑️ REMOVE: $file_path"
+    
+    # Log della rimozione
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] REMOVED: $file_path" >> "$PROJECT_MEMORY/session.log"
+    
+    # Rimuovi il file
+    rm -f "$file_path"
+    
+    # Aggiorna l'alberatura
+    update_project_tree
+    
+    return 0
+}
+
+# Funzione per aggiornare state.md mantenendo lo storico
+update_state_with_history() {
+    local new_content="$1"
+    local state_file="$PROJECT_MEMORY/state.md"
+    
+    # Se il file non esiste, crealo normalmente
+    if [ ! -f "$state_file" ]; then
+        echo "$new_content" > "$state_file"
+        return
+    fi
+    
+    # Backup del contenuto attuale
+    local backup_content=$(cat "$state_file")
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    # Crea il nuovo contenuto con storico
+    cat > "$state_file" << EOF
+$new_content
+
+---
+
+## Storico Modifiche
+
+### $timestamp
+$(echo "$backup_content" | grep -v "^---$" | grep -v "^## Storico Modifiche" | tail -n +1)
+
+EOF
+    
+    # Se c'era già uno storico, mantienilo (limitato agli ultimi 5 aggiornamenti)
+    if grep -q "## Storico Modifiche" <<< "$backup_content"; then
+        local historical_content=$(echo "$backup_content" | sed -n '/^## Storico Modifiche/,$p' | tail -n +2)
+        
+        # Aggiungi max 4 voci precedenti (per mantenere totale di 5 con quella corrente)
+        local previous_entries=$(echo "$historical_content" | awk '/^### [0-9]{4}-[0-9]{2}-[0-9]{2}/ {count++} count <= 4 {print}')
+        
+        if [ -n "$previous_entries" ]; then
+            echo "$previous_entries" >> "$state_file"
+        fi
+    fi
+}
+
+# Funzione per aggiornare decisions.md mantenendo lo storico
+update_decisions_with_history() {
+    local new_content="$1"
+    local decisions_file="$PROJECT_MEMORY/decisions.md"
+    
+    # Se il file non esiste, crealo normalmente
+    if [ ! -f "$decisions_file" ]; then
+        echo "$new_content" > "$decisions_file"
+        return
+    fi
+    
+    # Per decisions.md, aggiungiamo alla fine invece di sovrascrivere
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local existing_content=$(cat "$decisions_file")
+    
+    # Estrai solo le nuove decisioni (quello che non era già presente)
+    local new_decisions=$(echo "$new_content" | grep -v "^# Log Decisioni Chiave" | grep -v "^$")
+    
+    if [ -n "$new_decisions" ]; then
+        cat > "$decisions_file" << EOF
+$existing_content
+
+## Aggiornamento $timestamp
+$new_decisions
+EOF
+    fi
 }
 
 # --- PARSER E ESECUTORE ---
@@ -139,7 +292,7 @@ parse_marvin_actions() {
     local content=""
     
     while IFS= read -r line; do
-        if [[ "$line" =~ ^MARVIN_ACTION:(CREATE|UPDATE|RUN):(.+)$ ]]; then
+        if [[ "$line" =~ ^MARVIN_ACTION:(CREATE|UPDATE|REMOVE|DELETE|RUN):(.+)$ ]]; then
             action_type="${BASH_REMATCH[1]}"
             action_path="${BASH_REMATCH[2]}"
             content=""
@@ -175,6 +328,7 @@ execute_marvin_actions() {
     
     echo "🚀 Marvin: Eseguendo azioni..."
     local executed=0
+    local git_changes=false
     
     while IFS= read -r line || [[ -n "$line" ]]; do
         local action_type="${line%%|||*}"
@@ -190,13 +344,35 @@ execute_marvin_actions() {
                 if [ "$dir_path" != "." ] && [ ! -d "$dir_path" ]; then
                     mkdir -p "$dir_path"
                 fi
-                echo -n "$content" > "$action_path"
+                
+                # Gestione speciale per file di memoria con storico
+                if [[ "$action_path" == *"/.marvin_memory/state.md" ]] || [[ "$action_path" == *".marvin_memory/state.md" ]]; then
+                    update_state_with_history "$content"
+                elif [[ "$action_path" == *"/.marvin_memory/decisions.md" ]] || [[ "$action_path" == *".marvin_memory/decisions.md" ]]; then
+                    update_decisions_with_history "$content"
+                else
+                    echo -n "$content" > "$action_path"
+                fi
+                
+                # Aggiorna alberatura dopo modifiche ai file
+                update_project_tree
+                git_changes=true
                 ((executed++))
+                ;;
+            "REMOVE"|"DELETE")
+                if handle_file_removal "$action_path"; then
+                    git_changes=true
+                    ((executed++))
+                fi
                 ;;
             "RUN")
                 echo "⚡ RUN: $action_path"
-                if [[ "$action_path" =~ ^(npm|yarn|git|mkdir|touch|echo|npx|cd|ls|cat) ]]; then
+                if [[ "$action_path" =~ ^(npm|yarn|git|mkdir|touch|echo|npx|cd|ls|cat|rm) ]]; then
                     eval "$action_path"
+                    # Se è un comando rm, aggiorna l'alberatura
+                    if [[ "$action_path" =~ ^rm ]]; then
+                        update_project_tree
+                    fi
                     ((executed++))
                 else
                     echo "⚠️ Comando non sicuro ignorato: $action_path"
@@ -206,9 +382,81 @@ execute_marvin_actions() {
     done < "$commands_file"
     
     echo "✅ Marvin ha eseguito $executed azioni"
+    
+    # Git commit automatico se ci sono stati cambiamenti
+    if [ "$git_changes" = true ]; then
+        marvin_git_commit "$executed"
+    fi
 }
 
-# --- GESTIONE MEMORIA ---
+# Funzione per commit e push automatici
+marvin_git_commit() {
+    local action_count="$1"
+    
+    # Inizializza git se non esiste
+    if [ ! -d ".git" ]; then
+        echo "🔧 Inizializzando repository Git..."
+        git init
+        git branch -M main
+        
+        # Crea .gitignore se non esiste
+        if [ ! -f ".gitignore" ]; then
+            cat > .gitignore << 'EOF'
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db
+EOF
+        fi
+    fi
+    
+    # Controlla se ci sono modifiche da committare
+    if git diff --quiet && git diff --cached --quiet; then
+        echo "ℹ️ Nessuna modifica da committare"
+        return 0
+    fi
+    
+    echo "📦 Marvin: Creando commit automatico..."
+    
+    # Aggiungi tutti i file modificati
+    git add .
+    
+    # Crea messaggio di commit intelligente
+    local commit_msg="🤖 Marvin: $action_count modifiche automatiche"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    # Aggiungi dettagli sui file modificati
+    local modified_files=$(git diff --cached --name-only | head -5 | tr '\n' ', ' | sed 's/,$//')
+    if [ -n "$modified_files" ]; then
+        commit_msg="$commit_msg
+
+📝 File modificati: $modified_files
+⏰ Timestamp: $timestamp
+🔧 Azioni eseguite: $action_count"
+    fi
+    
+    # Commit
+    git commit -m "$commit_msg"
+    
+    # Push se esiste un remote
+    if git remote get-url origin >/dev/null 2>&1; then
+        echo "🚀 Marvin: Push su repository remoto..."
+        git push origin main 2>/dev/null || {
+            echo "⚠️ Push fallito - controlla che il remote sia configurato correttamente"
+            echo "💡 Per configurare: git remote add origin <URL_REPOSITORY>"
+        }
+    else
+        echo "ℹ️ Nessun remote configurato - commit solo locale"
+        echo "💡 Per aggiungere remote: git remote add origin <URL_REPOSITORY>"
+    fi
+    
+    echo "✅ Commit creato: $(git log --oneline -1)"
+}
+
+# --- GESTIONE MEMORIA PROMPT ---
 build_context_prompt() {
     local user_request="$1" config_file="$2"
     local system_prompt=$(jq -r '.system_prompt' "$config_file")
@@ -219,6 +467,7 @@ build_context_prompt() {
     local state_content=""
     local decisions_content=""
     local session_history=""
+    local tree_content=""
     
     if [ -f "$PROJECT_MEMORY/idea.md" ]; then
         idea_content=$(cat "$PROJECT_MEMORY/idea.md")
@@ -240,8 +489,9 @@ build_context_prompt() {
         session_history=$(tail -n 10 "$PROJECT_MEMORY/session.log")
     fi
     
-    # Struttura file corrente (escludendo noise)
-    local file_structure=$(find . -type f -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" -o -name "*.json" -o -name "*.md" | grep -v node_modules | grep -v .git | grep -v .marvin_memory | head -20)
+    if [ -f "$PROJECT_MEMORY/tree.md" ]; then
+        tree_content=$(head -20 "$PROJECT_MEMORY/tree.md")
+    fi
     
     # Costruisci il prompt completo
     cat << EOF
@@ -261,11 +511,11 @@ $state_content
 --- DECISIONI PRESE ---
 $decisions_content
 
+--- ALBERATURA PROGETTO ---
+$tree_content
+
 --- SESSIONE RECENTE ---
 $session_history
-
---- STRUTTURA FILE ---
-$file_structure
 
 === RICHIESTA UTENTE ===
 $user_request
@@ -374,6 +624,18 @@ EOF
 Inizializzazione progetto
 EOF
 
+        cat > "$PROJECT_MEMORY/tree.md" << 'EOF'
+# Alberatura Progetto
+
+## Struttura Corrente (inizializzazione)
+```
+[Progetto vuoto - alberatura verrà generata automaticamente]
+```
+
+## Cronologia Modifiche
+*Inizializzazione - alberatura verrà aggiornata automaticamente*
+EOF
+
         cat > "$PROJECT_MEMORY/decisions.md" << 'EOF'
 # Log Decisioni Chiave
 
@@ -393,6 +655,9 @@ EOF
     
     # Inizializza il log di sessione
     echo "[$(date '+%H:%M')] Progetto '$project_name' inizializzato" > "$PROJECT_MEMORY/session.log"
+    
+    # Genera l'alberatura iniziale
+    update_project_tree
     
     # Crea .gitignore base
     cat > .gitignore << 'EOF'
@@ -506,9 +771,81 @@ command_status() {
         echo ""
     fi
     
+    # Status Git
+    if [ -d ".git" ]; then
+        echo "📦 GIT:"
+        echo "   Branch: $(git branch --show-current 2>/dev/null || echo 'Non inizializzato')"
+        if git remote get-url origin >/dev/null 2>&1; then
+            echo "   Remote: $(git remote get-url origin)"
+        else
+            echo "   Remote: Non configurato"
+        fi
+        echo "   Ultimo commit: $(git log --oneline -1 2>/dev/null || echo 'Nessun commit')"
+        echo ""
+    fi
+    
     if [ -f "$PROJECT_MEMORY/session.log" ]; then
         echo "📝 ULTIMA ATTIVITÀ:"
         tail -n 3 "$PROJECT_MEMORY/session.log" | sed 's/^/   /'
+    fi
+}
+
+command_git_setup() {
+    local repo_url="$1"
+    
+    if [ -z "$repo_url" ]; then
+        echo "❌ URL repository mancante"
+        echo "Uso: marvin git <URL_REPOSITORY>"
+        echo ""
+        echo "Esempi:"
+        echo "  marvin git https://github.com/user/repo.git"
+        echo "  marvin git git@github.com:user/repo.git"
+        return 1
+    fi
+    
+    # Inizializza git se necessario
+    if [ ! -d ".git" ]; then
+        echo "🔧 Inizializzando repository Git..."
+        git init
+        git branch -M main
+    fi
+    
+    # Configura remote origin
+    if git remote get-url origin >/dev/null 2>&1; then
+        echo "🔄 Aggiornando remote origin esistente..."
+        git remote set-url origin "$repo_url"
+    else
+        echo "🔗 Aggiungendo remote origin..."
+        git remote add origin "$repo_url"
+    fi
+    
+    # Test connessione
+    echo "🧪 Testando connessione al repository..."
+    if git ls-remote origin >/dev/null 2>&1; then
+        echo "✅ Connessione al repository riuscita!"
+        
+        # Prima push se necessario
+        if ! git log --oneline -1 >/dev/null 2>&1; then
+            echo "📦 Creando commit iniziale..."
+            git add .
+            git commit -m "🚀 Setup iniziale progetto Marvin
+
+📁 Progetto: $(basename $(pwd))
+⏰ Data: $(date)
+🤖 Versioning automatico abilitato"
+        fi
+        
+        echo "🚀 Push iniziale..."
+        git push -u origin main
+        
+        echo ""
+        echo "✅ Repository configurato con successo!"
+        echo "🤖 Marvin ora creerà automaticamente commit e push per ogni modifica"
+        
+    else
+        echo "❌ Impossibile connettersi al repository"
+        echo "Verifica che l'URL sia corretto e che tu abbia i permessi necessari"
+        return 1
     fi
 }
 
@@ -523,6 +860,9 @@ case "$1" in
     "status")
         command_status
         ;;
+    "git")
+        command_git_setup "$2"
+        ;;
     ""|"help"|"-h"|"--help")
         echo "Marvin AI Assistant - Sistema Unificato"
         echo ""
@@ -530,9 +870,14 @@ case "$1" in
         echo "  new <progetto>     Crea nuovo progetto con memoria"
         echo "  chat              Avvia sessione interattiva"
         echo "  status            Mostra stato progetto corrente"
+        echo "  git <url>         Configura repository Git per versioning automatico"
         echo ""
         echo "Setup iniziale:"
         echo "  export MARVIN_HOME=\"\$HOME/.marvin\""
+        echo ""
+        echo "Versioning automatico:"
+        echo "  Marvin crea automaticamente commit e push per ogni modifica"
+        echo "  Usa 'marvin git <URL>' per configurare il repository remoto"
         ;;
     *)
         echo "❌ Comando sconosciuto: '$1'"
