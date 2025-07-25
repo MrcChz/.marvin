@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Marvin AI Client - Sistema Unificato v8.1
+# Marvin AI Client - Sistema Unificato v8.2 FIXED
 # "Un assistente che capisce il contesto e implementa automaticamente"
 
 # --- CONFIGURAZIONE INIZIALE ---
@@ -23,11 +23,18 @@ call_claude_api() {
     local message="$1" config_file="$2"
     local api_key=$(jq -r '.ai_providers.claude.api_key' "$config_file")
     local model=$(jq -r '.ai_providers.claude.model' "$config_file")
+    
+    if [ "$api_key" = "null" ] || [ -z "$api_key" ]; then
+        echo '{"error": {"message": "API key Claude non configurata"}}'
+        return 1
+    fi
+    
     local payload=$(jq -n --arg model "$model" --arg message "$message" '{
         "model": $model,
         "max_tokens": 4096,
         "messages": [{"role": "user", "content": $message}]
     }')
+    
     curl -s -X POST "https://api.anthropic.com/v1/messages" \
         -H "Content-Type: application/json" \
         -H "x-api-key: $api_key" \
@@ -39,11 +46,18 @@ call_openai_api() {
     local message="$1" config_file="$2"
     local api_key=$(jq -r '.ai_providers.openai.api_key' "$config_file")
     local model=$(jq -r '.ai_providers.openai.model' "$config_file")
+    
+    if [ "$api_key" = "null" ] || [ -z "$api_key" ]; then
+        echo '{"error": {"message": "API key OpenAI non configurata"}}'
+        return 1
+    fi
+    
     local payload=$(jq -n --arg model "$model" --arg message "$message" '{
         "model": $model,
         "max_tokens": 4096,
         "messages": [{"role": "user", "content": $message}]
     }')
+    
     curl -s -X POST "https://api.openai.com/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $api_key" \
@@ -54,11 +68,18 @@ call_groq_api() {
     local message="$1" config_file="$2"
     local api_key=$(jq -r '.ai_providers.groq.api_key' "$config_file")
     local model=$(jq -r '.ai_providers.groq.model' "$config_file")
+    
+    if [ "$api_key" = "null" ] || [ -z "$api_key" ]; then
+        echo '{"error": {"message": "API key Groq non configurata"}}'
+        return 1
+    fi
+    
     local payload=$(jq -n --arg model "$model" --arg message "$message" '{
         "model": $model,
         "max_tokens": 4096,
         "messages": [{"role": "user", "content": $message}]
     }')
+    
     curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $api_key" \
@@ -68,11 +89,19 @@ call_groq_api() {
 call_ollama_api() {
     local message="$1" config_file="$2"
     local model=$(jq -r '.ai_providers.ollama.model' "$config_file")
+    
+    # Test connessione Ollama
+    if ! curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+        echo '{"error": {"message": "Ollama service non raggiungibile su localhost:11434"}}'
+        return 1
+    fi
+    
     local payload=$(jq -n --arg model "$model" --arg message "$message" '{
         "model": $model,
         "prompt": $message,
         "stream": false
     }')
+    
     curl -s -X POST "http://localhost:11434/api/generate" \
         -H "Content-Type: application/json" \
         -d "$payload"
@@ -82,10 +111,17 @@ call_azure_api() {
     local message="$1" config_file="$2"
     local api_key=$(jq -r '.ai_providers.azure.api_key' "$config_file")
     local api_url=$(jq -r '.ai_providers.azure.api_url' "$config_file")
+    
+    if [ "$api_key" = "null" ] || [ -z "$api_key" ] || [ "$api_url" = "null" ] || [ -z "$api_url" ]; then
+        echo '{"error": {"message": "API key o URL Azure non configurati"}}'
+        return 1
+    fi
+    
     local payload=$(jq -n --arg message "$message" '{
         "max_tokens": 4096,
         "messages": [{"role": "user", "content": $message}]
     }')
+    
     curl -s -X POST "$api_url" \
         -H "Content-Type: application/json" \
         -H "api-key: $api_key" \
@@ -94,18 +130,34 @@ call_azure_api() {
 
 call_ai() {
     local provider="$1" message="$2" config_file="$3"
+    
+    # Verifica che il provider esista nella configurazione
+    local provider_exists=$(jq -r ".ai_providers | has(\"$provider\")" "$config_file")
+    if [ "$provider_exists" != "true" ]; then
+        echo '{"error": {"message": "Provider AI non configurato: '$provider'"}}'
+        return 1
+    fi
+    
     case "$provider" in
         "claude") call_claude_api "$message" "$config_file" ;;
         "openai") call_openai_api "$message" "$config_file" ;;
         "groq") call_groq_api "$message" "$config_file" ;;
         "ollama") call_ollama_api "$message" "$config_file" ;;
         "azure") call_azure_api "$message" "$config_file" ;;
-        *) echo '{"error": "Provider non supportato"}' ;;
+        *) echo '{"error": {"message": "Provider non supportato: '$provider'"}}' ;;
     esac
 }
 
 extract_ai_response() {
     local provider="$1" api_response="$2"
+    
+    # Verifica se c'è un errore nella risposta
+    local error_msg=$(echo "$api_response" | jq -r '.error.message // empty' 2>/dev/null)
+    if [ -n "$error_msg" ]; then
+        echo "❌ Errore API ($provider): $error_msg" >&2
+        return 1
+    fi
+    
     case "$provider" in
         "claude") 
             echo "$api_response" | jq -r '.content[0].text // empty' 2>/dev/null 
@@ -124,30 +176,25 @@ extract_ai_response() {
 
 # --- GESTIONE MEMORIA E ALBERATURA ---
 
-# Funzione per aggiornare l'alberatura del progetto
 update_project_tree() {
     local tree_file="$PROJECT_MEMORY/tree.md"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     
-    # Genera l'alberatura corrente (escludendo .git, node_modules, etc.)
-    local current_tree=""
-    if command -v tree >/dev/null 2>&1; then
-        current_tree=$(tree -I 'node_modules|.git|dist|build|*.log|.DS_Store' -a 2>/dev/null)
-    else
-        # Fallback con find se tree non è disponibile
-        current_tree=$(find . -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/dist/*' -not -path '*/build/*' -not -name '*.log' -not -name '.DS_Store' | sort | sed 's|^\./||' | awk '{
-            depth = gsub(/\//, "/", $0)
-            indent = ""
-            for(i=0; i<depth; i++) indent = indent "  "
-            filename = $0
-            sub(/.*\//, "", filename)
-            if(filename != "") print indent filename
-        }')
-    fi
+    # Genera l'alberatura corrente con find
+    local current_tree=$(find . -type f \
+        -not -path '*/node_modules/*' \
+        -not -path '*/.git/*' \
+        -not -path '*/dist/*' \
+        -not -path '*/build/*' \
+        -not -path '*/.marvin_memory/*' \
+        -not -name '*.log' \
+        -not -name '.DS_Store' \
+        -not -name 'Thumbs.db' \
+        | sort \
+        | sed 's|^\./||' \
+        | head -50)
     
-    # Crea o aggiorna il file tree
-    if [ ! -f "$tree_file" ]; then
-        cat > "$tree_file" << EOF
+    cat > "$tree_file" << EOF
 # Alberatura Progetto
 
 ## Struttura Corrente (aggiornata: $timestamp)
@@ -155,36 +202,13 @@ update_project_tree() {
 $current_tree
 \`\`\`
 
-## Cronologia Modifiche
-*Prima generazione dell'alberatura*
+## Info
+- File mostrati: $(echo "$current_tree" | wc -l)
+- Esclusi: node_modules, .git, dist, build, .marvin_memory, *.log
+- Ultimo aggiornamento: $timestamp
 EOF
-    else
-        # Mantieni storico delle alberature precedenti
-        local old_content=$(cat "$tree_file")
-        local old_tree=$(echo "$old_content" | sed -n '/```/,/```/p' | sed '1d;$d')
-        
-        # Confronta se ci sono modifiche significative
-        if [ "$current_tree" != "$old_tree" ]; then
-            cat > "$tree_file" << EOF
-# Alberatura Progetto
-
-## Struttura Corrente (aggiornata: $timestamp)
-\`\`\`
-$current_tree
-\`\`\`
-
-## Cronologia Modifiche
-
-### $timestamp
-Struttura aggiornata automaticamente
-
-$(echo "$old_content" | sed -n '/## Cronologia Modifiche/,$p' | tail -n +2 | head -20)
-EOF
-        fi
-    fi
 }
 
-# Funzione per gestire rimozione file con tracking
 handle_file_removal() {
     local file_path="$1"
     
@@ -195,89 +219,105 @@ handle_file_removal() {
     
     echo "🗑️ REMOVE: $file_path"
     
-    # Log della rimozione
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp=$(date '+%H:%M:%S')
     echo "[$timestamp] REMOVED: $file_path" >> "$PROJECT_MEMORY/session.log"
     
-    # Rimuovi il file
     rm -f "$file_path"
-    
-    # Aggiorna l'alberatura
     update_project_tree
     
     return 0
 }
 
-# Funzione per aggiornare state.md mantenendo lo storico
-update_state_with_history() {
+update_state_md() {
     local new_content="$1"
     local state_file="$PROJECT_MEMORY/state.md"
     
-    # Se il file non esiste, crealo normalmente
-    if [ ! -f "$state_file" ]; then
-        echo "$new_content" > "$state_file"
-        return
+    if [ -z "$new_content" ]; then
+        echo "⚠️ SICUREZZA: Tentativo di scrivere state.md vuoto - BLOCCATO"
+        return 1
     fi
     
-    # Backup del contenuto attuale
-    local backup_content=$(cat "$state_file")
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    if [ -f "$state_file" ] && [ -s "$state_file" ]; then
+        cp "$state_file" "$state_file.backup"
+    fi
     
-    # Crea il nuovo contenuto con storico
-    cat > "$state_file" << EOF
-$new_content
-
----
-
-## Storico Modifiche
-
-### $timestamp
-$(echo "$backup_content" | grep -v "^---$" | grep -v "^## Storico Modifiche" | tail -n +1)
-
-EOF
+    local temp_file="$state_file.tmp"
+    echo "$new_content" > "$temp_file"
     
-    # Se c'era già uno storico, mantienilo (limitato agli ultimi 5 aggiornamenti)
-    if grep -q "## Storico Modifiche" <<< "$backup_content"; then
-        local historical_content=$(echo "$backup_content" | sed -n '/^## Storico Modifiche/,$p' | tail -n +2)
-        
-        # Aggiungi max 4 voci precedenti (per mantenere totale di 5 con quella corrente)
-        local previous_entries=$(echo "$historical_content" | awk '/^### [0-9]{4}-[0-9]{2}-[0-9]{2}/ {count++} count <= 4 {print}')
-        
-        if [ -n "$previous_entries" ]; then
-            echo "$previous_entries" >> "$state_file"
+    if [ -s "$temp_file" ]; then
+        mv "$temp_file" "$state_file"
+        local timestamp=$(date '+%H:%M:%S')
+        echo "[$timestamp] UPDATED: state.md ($(wc -l < "$state_file") righe)" >> "$PROJECT_MEMORY/session.log"
+        rm -f "$state_file.backup"
+    else
+        echo "❌ ERRORE: Impossibile aggiornare state.md"
+        if [ -f "$state_file.backup" ]; then
+            mv "$state_file.backup" "$state_file"
+            echo "🔄 Ripristinato state.md da backup"
         fi
+        rm -f "$temp_file"
+        return 1
     fi
 }
 
-# Funzione per aggiornare decisions.md mantenendo lo storico
-update_decisions_with_history() {
+update_decisions_md() {
     local new_content="$1"
     local decisions_file="$PROJECT_MEMORY/decisions.md"
     
-    # Se il file non esiste, crealo normalmente
+    if [ -z "$new_content" ] || [ ${#new_content} -lt 10 ]; then
+        echo "⚠️ SICUREZZA: Contenuto decisions.md troppo breve - SALTATO"
+        return 1
+    fi
+    
     if [ ! -f "$decisions_file" ]; then
         echo "$new_content" > "$decisions_file"
         return
     fi
     
-    # Per decisions.md, aggiungiamo alla fine invece di sovrascrivere
+    cp "$decisions_file" "$decisions_file.backup"
+    
+    local first_line=$(echo "$new_content" | head -1 | sed 's/[^a-zA-Z0-9]//g')
+    if [ -n "$first_line" ] && grep -q "$first_line" "$decisions_file" 2>/dev/null; then
+        echo "ℹ️ Decisione già presente, non aggiungo duplicato"
+        rm -f "$decisions_file.backup"
+        return 0
+    fi
+    
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local existing_content=$(cat "$decisions_file")
-    
-    # Estrai solo le nuove decisioni (quello che non era già presente)
-    local new_decisions=$(echo "$new_content" | grep -v "^# Log Decisioni Chiave" | grep -v "^$")
-    
-    if [ -n "$new_decisions" ]; then
-        cat > "$decisions_file" << EOF
-$existing_content
+    cat >> "$decisions_file" << EOF
 
 ## Aggiornamento $timestamp
-$new_decisions
+$new_content
 EOF
+    
+    if [ $? -eq 0 ]; then
+        echo "[$(date '+%H:%M:%S')] UPDATED: decisions.md" >> "$PROJECT_MEMORY/session.log"
+        rm -f "$decisions_file.backup"
+    else
+        echo "❌ ERRORE: Impossibile aggiornare decisions.md"
+        mv "$decisions_file.backup" "$decisions_file"
+        return 1
+    fi
+}
+
+cleanup_session_log() {
+    local session_file="$PROJECT_MEMORY/session.log"
+    
+    if [ ! -f "$session_file" ]; then
+        return 0
+    fi
+    
+    local line_count=$(wc -l < "$session_file")
+    
+    if [ "$line_count" -gt 200 ]; then
+        tail -n 100 "$session_file" > "$session_file.tmp"
+        mv "$session_file.tmp" "$session_file"
+        echo "[$(date '+%H:%M:%S')] LOG: Pulito automaticamente (era $line_count righe)" >> "$session_file"
     fi
 }
 
 # --- PARSER E ESECUTORE ---
+
 parse_marvin_actions() {
     local ai_response="$1"
     local commands_file="$MARVIN_TEMP/actions.txt"
@@ -292,15 +332,25 @@ parse_marvin_actions() {
     local content=""
     
     while IFS= read -r line; do
-        if [[ "$line" =~ ^MARVIN_ACTION:(CREATE|UPDATE|REMOVE|DELETE|RUN):(.+)$ ]]; then
+        if [[ "$line" =~ ^MARVIN_ACTION:(CREATE|UPDATE|REMOVE|RUN):(.+)$ ]]; then
             action_type="${BASH_REMATCH[1]}"
             action_path="${BASH_REMATCH[2]}"
             content=""
             in_action=true
         elif [[ "$line" == "MARVIN_END" ]] && [[ "$in_action" == true ]]; then
-            local encoded_content=$(echo -n "$content" | base64 -w 0)
-            echo "${action_type}|||${action_path}|||${encoded_content}" >> "$commands_file"
-            ((action_count++))
+            if [ "$action_type" = "RUN" ] || [ -n "$content" ] || [ "$action_type" = "REMOVE" ]; then
+                local encoded_content=$(echo -n "$content" | base64 -w 0)
+                local decoded_test=$(echo "$encoded_content" | base64 -d 2>/dev/null)
+                
+                if [ "$?" -eq 0 ] && [ "$decoded_test" = "$content" ]; then
+                    echo "${action_type}|||${action_path}|||${encoded_content}" >> "$commands_file"
+                    ((action_count++))
+                else
+                    echo "⚠️ ERRORE BASE64: Encoding fallito per $action_path - azione saltata"
+                fi
+            else
+                echo "⚠️ CONTENUTO VUOTO: $action_type per $action_path - azione saltata"
+            fi
             in_action=false
         elif [[ "$in_action" == true ]]; then
             if [ -z "$content" ]; then
@@ -339,27 +389,43 @@ execute_marvin_actions() {
         
         case "$action_type" in
             "CREATE"|"UPDATE")
+                if [ -z "$content" ] && [[ "$action_path" =~ \.(js|jsx|ts|tsx|py|php|java|cpp|c)$ ]]; then
+                    echo "⚠️ SICUREZZA: Contenuto vuoto per file codice $action_path - SALTATO"
+                    continue
+                fi
+                
                 echo "📝 $action_type: $action_path"
                 local dir_path=$(dirname "$action_path")
                 if [ "$dir_path" != "." ] && [ ! -d "$dir_path" ]; then
                     mkdir -p "$dir_path"
                 fi
                 
-                # Gestione speciale per file di memoria con storico
-                if [[ "$action_path" == *"/.marvin_memory/state.md" ]] || [[ "$action_path" == *".marvin_memory/state.md" ]]; then
-                    update_state_with_history "$content"
-                elif [[ "$action_path" == *"/.marvin_memory/decisions.md" ]] || [[ "$action_path" == *".marvin_memory/decisions.md" ]]; then
-                    update_decisions_with_history "$content"
-                else
-                    echo -n "$content" > "$action_path"
+                if [ "$action_type" = "UPDATE" ] && [ -f "$action_path" ] && [[ "$action_path" =~ \.(js|jsx|ts|tsx|json|py)$ ]]; then
+                    cp "$action_path" "$action_path.marvin_backup"
+                    echo "🔒 Backup creato: $action_path.marvin_backup"
                 fi
                 
-                # Aggiorna alberatura dopo modifiche ai file
+                if [[ "$action_path" == ".marvin_memory/state.md" ]]; then
+                    update_state_md "$content"
+                elif [[ "$action_path" == ".marvin_memory/decisions.md" ]]; then
+                    update_decisions_md "$content"
+                else
+                    local temp_file="$action_path.tmp"
+                    echo -n "$content" > "$temp_file"
+                    
+                    if [ -f "$temp_file" ]; then
+                        mv "$temp_file" "$action_path"
+                    else
+                        echo "❌ ERRORE: Impossibile scrivere $action_path"
+                        continue
+                    fi
+                fi
+                
                 update_project_tree
                 git_changes=true
                 ((executed++))
                 ;;
-            "REMOVE"|"DELETE")
+            "REMOVE")
                 if handle_file_removal "$action_path"; then
                     git_changes=true
                     ((executed++))
@@ -367,10 +433,9 @@ execute_marvin_actions() {
                 ;;
             "RUN")
                 echo "⚡ RUN: $action_path"
-                if [[ "$action_path" =~ ^(npm|yarn|git|mkdir|touch|echo|npx|cd|ls|cat|rm) ]]; then
+                if [[ "$action_path" =~ ^(npm|yarn|git|mkdir|touch|echo|npx|cd|ls|cat|rm|cp|mv|chmod|pip|python|node) ]]; then
                     eval "$action_path"
-                    # Se è un comando rm, aggiorna l'alberatura
-                    if [[ "$action_path" =~ ^rm ]]; then
+                    if [[ "$action_path" =~ ^(rm|cp|mv|mkdir|npm|yarn|git) ]]; then
                         update_project_tree
                     fi
                     ((executed++))
@@ -383,23 +448,21 @@ execute_marvin_actions() {
     
     echo "✅ Marvin ha eseguito $executed azioni"
     
-    # Git commit automatico se ci sono stati cambiamenti
+    cleanup_session_log
+    
     if [ "$git_changes" = true ]; then
         marvin_git_commit "$executed"
     fi
 }
 
-# Funzione per commit e push automatici
 marvin_git_commit() {
     local action_count="$1"
     
-    # Inizializza git se non esiste
     if [ ! -d ".git" ]; then
         echo "🔧 Inizializzando repository Git..."
         git init
         git branch -M main
         
-        # Crea .gitignore se non esiste
         if [ ! -f ".gitignore" ]; then
             cat > .gitignore << 'EOF'
 node_modules/
@@ -413,7 +476,6 @@ EOF
         fi
     fi
     
-    # Controlla se ci sono modifiche da committare
     if git diff --quiet && git diff --cached --quiet; then
         echo "ℹ️ Nessuna modifica da committare"
         return 0
@@ -421,14 +483,11 @@ EOF
     
     echo "📦 Marvin: Creando commit automatico..."
     
-    # Aggiungi tutti i file modificati
     git add .
     
-    # Crea messaggio di commit intelligente
     local commit_msg="🤖 Marvin: $action_count modifiche automatiche"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     
-    # Aggiungi dettagli sui file modificati
     local modified_files=$(git diff --cached --name-only | head -5 | tr '\n' ', ' | sed 's/,$//')
     if [ -n "$modified_files" ]; then
         commit_msg="$commit_msg
@@ -438,30 +497,26 @@ EOF
 🔧 Azioni eseguite: $action_count"
     fi
     
-    # Commit
     git commit -m "$commit_msg"
     
-    # Push se esiste un remote
     if git remote get-url origin >/dev/null 2>&1; then
         echo "🚀 Marvin: Push su repository remoto..."
         git push origin main 2>/dev/null || {
             echo "⚠️ Push fallito - controlla che il remote sia configurato correttamente"
-            echo "💡 Per configurare: git remote add origin <URL_REPOSITORY>"
         }
     else
         echo "ℹ️ Nessun remote configurato - commit solo locale"
-        echo "💡 Per aggiungere remote: git remote add origin <URL_REPOSITORY>"
     fi
     
     echo "✅ Commit creato: $(git log --oneline -1)"
 }
 
 # --- GESTIONE MEMORIA PROMPT ---
+
 build_context_prompt() {
     local user_request="$1" config_file="$2"
     local system_prompt=$(jq -r '.system_prompt' "$config_file")
     
-    # Carica la memoria del progetto
     local idea_content=""
     local vibe_content=""
     local state_content=""
@@ -471,29 +526,40 @@ build_context_prompt() {
     
     if [ -f "$PROJECT_MEMORY/idea.md" ]; then
         idea_content=$(cat "$PROJECT_MEMORY/idea.md")
+    else
+        idea_content="*File idea.md non ancora creato*"
     fi
     
     if [ -f "$PROJECT_MEMORY/vibe.md" ]; then
         vibe_content=$(cat "$PROJECT_MEMORY/vibe.md")
+    else
+        vibe_content="*File vibe.md non ancora creato*"
     fi
     
     if [ -f "$PROJECT_MEMORY/state.md" ]; then
         state_content=$(cat "$PROJECT_MEMORY/state.md")
+    else
+        state_content="*File state.md non ancora creato*"
     fi
     
     if [ -f "$PROJECT_MEMORY/decisions.md" ]; then
         decisions_content=$(cat "$PROJECT_MEMORY/decisions.md")
+    else
+        decisions_content="*File decisions.md non ancora creato*"
     fi
     
     if [ -f "$PROJECT_MEMORY/session.log" ]; then
         session_history=$(tail -n 10 "$PROJECT_MEMORY/session.log")
+    else
+        session_history="*Nessuna sessione precedente*"
     fi
     
     if [ -f "$PROJECT_MEMORY/tree.md" ]; then
-        tree_content=$(head -20 "$PROJECT_MEMORY/tree.md")
+        tree_content=$(head -30 "$PROJECT_MEMORY/tree.md")
+    else
+        tree_content="*Alberatura non ancora generata*"
     fi
     
-    # Costruisci il prompt completo
     cat << EOF
 $system_prompt
 
@@ -519,17 +585,40 @@ $session_history
 
 === RICHIESTA UTENTE ===
 $user_request
+
+=== IMPORTANTE ===
+Per modificare file usa SEMPRE il formato:
+MARVIN_ACTION:TIPO:path/file.ext
+[contenuto]
+MARVIN_END
+
+Tipi disponibili: CREATE, UPDATE, REMOVE, RUN
+Per aggiornare la memoria usa i path: .marvin_memory/state.md, .marvin_memory/decisions.md, etc.
 EOF
 }
 
 update_session_log() {
     local user_request="$1"
     local ai_response="$2"
-    echo "[$(date '+%H:%M')] USER: $user_request" >> "$PROJECT_MEMORY/session.log"
-    echo "[$(date '+%H:%M')] MARVIN: $(echo "$ai_response" | head -n 3 | tr '\n' ' ')..." >> "$PROJECT_MEMORY/session.log"
+    local timestamp=$(date '+%H:%M:%S')
+    
+    # Assicurati che la directory esista
+    if [ ! -d "$PROJECT_MEMORY" ]; then
+        mkdir -p "$PROJECT_MEMORY"
+    fi
+    
+    if [ ! -f "$PROJECT_MEMORY/session.log" ]; then
+        touch "$PROJECT_MEMORY/session.log"
+    fi
+    
+    echo "[$timestamp] USER: $user_request" >> "$PROJECT_MEMORY/session.log"
+    
+    local ai_summary=$(echo "$ai_response" | head -n 3 | tr '\n' ' ' | cut -c1-100)
+    echo "[$timestamp] MARVIN: $ai_summary..." >> "$PROJECT_MEMORY/session.log"
 }
 
 # --- COMANDI PRINCIPALI ---
+
 command_new() {
     local project_name="$1"
     
@@ -546,21 +635,17 @@ command_new() {
     
     echo "🚀 Creando progetto Marvin: $project_name"
     
-    # Crea la struttura del progetto
     mkdir "$project_name"
     cd "$project_name"
     
-    # Inizializza la memoria
     mkdir "$PROJECT_MEMORY"
     
-    # Copia i template se esistono, altrimenti crea versioni base
     if [ -f "$MARVIN_TEMPLATES/idea.md" ]; then
         cp "$MARVIN_TEMPLATES/idea.md" "$PROJECT_MEMORY/"
         cp "$MARVIN_TEMPLATES/vibe.md" "$PROJECT_MEMORY/"
         cp "$MARVIN_TEMPLATES/state.md" "$PROJECT_MEMORY/"
         cp "$MARVIN_TEMPLATES/decisions.md" "$PROJECT_MEMORY/"
     else
-        # Template di emergenza inline
         cat > "$PROJECT_MEMORY/idea.md" << 'EOF'
 # Nuovo Progetto
 
@@ -598,6 +683,9 @@ MARVIN_END
 2. Analizza il contesto esistente
 3. Implementa con MARVIN_ACTION
 4. Aggiorna automaticamente state.md
+
+## Livello Automazione
+**ALTO**: Marvin implementa tutto automaticamente senza chiedere conferma
 EOF
 
         cat > "$PROJECT_MEMORY/state.md" << 'EOF'
@@ -624,18 +712,6 @@ EOF
 Inizializzazione progetto
 EOF
 
-        cat > "$PROJECT_MEMORY/tree.md" << 'EOF'
-# Alberatura Progetto
-
-## Struttura Corrente (inizializzazione)
-```
-[Progetto vuoto - alberatura verrà generata automaticamente]
-```
-
-## Cronologia Modifiche
-*Inizializzazione - alberatura verrà aggiornata automaticamente*
-EOF
-
         cat > "$PROJECT_MEMORY/decisions.md" << 'EOF'
 # Log Decisioni Chiave
 
@@ -653,13 +729,10 @@ EOF
 EOF
     fi
     
-    # Inizializza il log di sessione
-    echo "[$(date '+%H:%M')] Progetto '$project_name' inizializzato" > "$PROJECT_MEMORY/session.log"
+    echo "[$(date '+%H:%M:%S')] Progetto '$project_name' inizializzato" > "$PROJECT_MEMORY/session.log"
     
-    # Genera l'alberatura iniziale
     update_project_tree
     
-    # Crea .gitignore base
     cat > .gitignore << 'EOF'
 node_modules/
 dist/
@@ -679,16 +752,15 @@ EOF
 }
 
 command_chat() {
-    # Verifica che siamo in un progetto Marvin
     if [ ! -d "$PROJECT_MEMORY" ]; then
         echo "❌ Non sei in un progetto Marvin"
         echo "Crea un nuovo progetto con: marvin new <nome>"
         return 1
     fi
     
-    # Verifica configurazione
     if [ ! -f "$MARVIN_CONFIG" ]; then
         echo "❌ File di configurazione non trovato: $MARVIN_CONFIG"
+        echo "💡 Esegui: bash ~/.marvin/utilities.sh fix-config"
         return 1
     fi
     
@@ -712,33 +784,41 @@ command_chat() {
                 echo ""
                 echo "🤖 Marvin ($provider) sta elaborando..."
                 
-                # Costruisci il prompt con contesto
                 local full_prompt=$(build_context_prompt "$user_input" "$MARVIN_CONFIG")
                 
-                # Chiama l'AI
                 local api_response=$(call_ai "$provider" "$full_prompt" "$MARVIN_CONFIG")
-                local ai_text=$(extract_ai_response "$provider" "$api_response")
                 
-                if [ -z "$ai_text" ]; then
+                if [ $? -ne 0 ]; then
                     echo "❌ Errore nella comunicazione con l'AI"
-                    echo "🔍 Debug info salvato in /tmp/marvin_debug.log"
-                    echo "📋 Risposta API ricevuta:"
-                    echo "$api_response" | head -5
+                    echo "🔍 Risposta ricevuta:"
+                    echo "$api_response" | head -3
                     echo ""
                     echo "💡 Verifica la configurazione con: bash ~/.marvin/utilities.sh check"
                     continue
                 fi
                 
-                # Aggiorna il log di sessione
+                local ai_text=$(extract_ai_response "$provider" "$api_response")
+                
+                if [ $? -ne 0 ] || [ -z "$ai_text" ]; then
+                    echo "❌ Errore nell'estrazione della risposta AI"
+                    echo "🔍 Debug info:"
+                    echo "$api_response" | jq . 2>/dev/null || echo "$api_response" | head -5
+                    echo ""
+                    echo "💡 Possibili cause:"
+                    echo "   - API key non valida o scaduta"
+                    echo "   - Quota API esaurita"
+                    echo "   - Servizio AI temporaneamente non disponibile"
+                    echo "   - Configurazione provider errata"
+                    continue
+                fi
+                
                 update_session_log "$user_input" "$ai_text"
                 
-                # Mostra la risposta
                 echo ""
                 echo "🤖 Marvin:"
                 echo "$ai_text"
                 echo ""
                 
-                # Parsa ed esegui le azioni
                 local actions_file="$MARVIN_TEMP/actions.txt"
                 if parse_marvin_actions "$ai_text"; then
                     execute_marvin_actions "$actions_file"
@@ -767,11 +847,10 @@ command_status() {
     
     if [ -f "$PROJECT_MEMORY/state.md" ]; then
         echo "⚙️ STATO:"
-        grep -E "^##|^- " "$PROJECT_MEMORY/state.md" | sed 's/^/   /'
+        grep -E "^##|^- " "$PROJECT_MEMORY/state.md" | head -10 | sed 's/^/   /'
         echo ""
     fi
     
-    # Status Git
     if [ -d ".git" ]; then
         echo "📦 GIT:"
         echo "   Branch: $(git branch --show-current 2>/dev/null || echo 'Non inizializzato')"
@@ -781,13 +860,29 @@ command_status() {
             echo "   Remote: Non configurato"
         fi
         echo "   Ultimo commit: $(git log --oneline -1 2>/dev/null || echo 'Nessun commit')"
+        
+        local modified_files=$(git diff --name-only 2>/dev/null)
+        if [ -n "$modified_files" ]; then
+            echo "   File modificati: $(echo "$modified_files" | tr '\n' ', ' | sed 's/,$//')"
+        fi
         echo ""
     fi
     
+    echo "🧠 MEMORIA:"
     if [ -f "$PROJECT_MEMORY/session.log" ]; then
-        echo "📝 ULTIMA ATTIVITÀ:"
-        tail -n 3 "$PROJECT_MEMORY/session.log" | sed 's/^/   /'
+        local log_lines=$(wc -l < "$PROJECT_MEMORY/session.log")
+        echo "   Session log: $log_lines righe"
+        echo "   Ultima attività:"
+        tail -n 3 "$PROJECT_MEMORY/session.log" | sed 's/^/     /'
     fi
+    
+    echo ""
+    echo "📁 FILE PRINCIPALI:"
+    find . -maxdepth 2 -type f \
+        -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" \
+        -o -name "*.json" -o -name "*.md" -o -name "*.html" -o -name "*.css" \
+        | grep -v node_modules | grep -v .git | grep -v .marvin_memory \
+        | head -10 | sed 's/^/   /'
 }
 
 command_git_setup() {
@@ -803,14 +898,12 @@ command_git_setup() {
         return 1
     fi
     
-    # Inizializza git se necessario
     if [ ! -d ".git" ]; then
         echo "🔧 Inizializzando repository Git..."
         git init
         git branch -M main
     fi
     
-    # Configura remote origin
     if git remote get-url origin >/dev/null 2>&1; then
         echo "🔄 Aggiornando remote origin esistente..."
         git remote set-url origin "$repo_url"
@@ -819,12 +912,10 @@ command_git_setup() {
         git remote add origin "$repo_url"
     fi
     
-    # Test connessione
     echo "🧪 Testando connessione al repository..."
     if git ls-remote origin >/dev/null 2>&1; then
         echo "✅ Connessione al repository riuscita!"
         
-        # Prima push se necessario
         if ! git log --oneline -1 >/dev/null 2>&1; then
             echo "📦 Creando commit iniziale..."
             git add .
@@ -849,6 +940,50 @@ command_git_setup() {
     fi
 }
 
+command_debug() {
+    echo "🔍 Marvin Debug Info"
+    echo "==================="
+    
+    echo "📁 MARVIN_HOME: $MARVIN_HOME"
+    echo "📄 Config file: $MARVIN_CONFIG"
+    echo "📂 Templates: $MARVIN_TEMPLATES"
+    echo "🗂️ Temp dir: $MARVIN_TEMP"
+    echo ""
+    
+    if [ -f "$MARVIN_CONFIG" ]; then
+        echo "⚙️ CONFIGURAZIONE:"
+        local default_ai=$(jq -r '.default_ai' "$MARVIN_CONFIG" 2>/dev/null || echo "Errore lettura")
+        echo "   Provider default: $default_ai"
+        
+        echo "   Provider configurati:"
+        jq -r '.ai_providers | keys[]' "$MARVIN_CONFIG" 2>/dev/null | sed 's/^/     /' || echo "     Errore lettura provider"
+        echo ""
+    else
+        echo "❌ File di configurazione mancante"
+        echo ""
+    fi
+    
+    if [ -d "$PROJECT_MEMORY" ]; then
+        echo "🧠 MEMORIA PROGETTO:"
+        echo "   Directory: $PROJECT_MEMORY"
+        echo "   File presenti:"
+        ls -la "$PROJECT_MEMORY" | sed 's/^/     /'
+        echo ""
+    else
+        echo "❌ Non sei in un progetto Marvin"
+        echo ""
+    fi
+    
+    echo "🔧 DIPENDENZE:"
+    for cmd in jq curl git; do
+        if command -v $cmd >/dev/null 2>&1; then
+            echo "   ✅ $cmd: $(which $cmd)"
+        else
+            echo "   ❌ $cmd: non trovato"
+        fi
+    done
+}
+
 # --- MAIN DISPATCHER ---
 case "$1" in
     "new")
@@ -863,17 +998,29 @@ case "$1" in
     "git")
         command_git_setup "$2"
         ;;
+    "debug")
+        command_debug
+        ;;
     ""|"help"|"-h"|"--help")
-        echo "Marvin AI Assistant - Sistema Unificato"
+        echo "Marvin AI Assistant - Sistema Unificato v8.2 FIXED"
         echo ""
         echo "Comandi:"
         echo "  new <progetto>     Crea nuovo progetto con memoria"
         echo "  chat              Avvia sessione interattiva"
         echo "  status            Mostra stato progetto corrente"
         echo "  git <url>         Configura repository Git per versioning automatico"
+        echo "  debug             Mostra informazioni di debug"
         echo ""
         echo "Setup iniziale:"
         echo "  export MARVIN_HOME=\"\$HOME/.marvin\""
+        echo "  bash ~/.marvin/utilities.sh fix-config"
+        echo "  # Configura le API key nel file config.json"
+        echo ""
+        echo "Esempio workflow:"
+        echo "  marvin new my-project"
+        echo "  cd my-project"
+        echo "  marvin git https://github.com/user/repo.git"
+        echo "  marvin chat"
         echo ""
         echo "Versioning automatico:"
         echo "  Marvin crea automaticamente commit e push per ogni modifica"

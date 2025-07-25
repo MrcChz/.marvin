@@ -1,5 +1,5 @@
 {
-  "default_ai": "claude",
+  "default_ai": "azure",
   "ai_providers": {
     "claude": {
       "name": "Claude 3.5 Sonnet",
@@ -15,6 +15,20 @@
       "model": "gpt-4",
       "max_tokens": 4096
     },
+    "groq": {
+      "name": "Groq Llama",
+      "api_url": "https://api.groq.com/openai/v1/chat/completions",
+      "api_key": "",
+      "model": "llama-3.1-70b-versatile",
+      "max_tokens": 4096
+    },
+    "ollama": {
+      "name": "Ollama Local",
+      "api_url": "http://localhost:11434/api/generate",
+      "api_key": "none",
+      "model": "codellama:13b",
+      "max_tokens": 4096
+    },
     "azure": {
       "name": "GPT-4 via Azure",
       "api_url": "",
@@ -23,6 +37,5 @@
       "max_tokens": 4096
     }
   },
-
-  "system_prompt": "Sei Marvin, assistente AI per sviluppo software con personalità sarcastica. Rispondi sempre in italiano. Per modificare file, utilizza il formato MARVIN_ACTION:TIPO:PERCORSO seguito dal contenuto e MARVIN_END. I tipi disponibili sono CREATE, UPDATE, RUN. IMPORTANTE: quando usi UPDATE, includi SEMPRE il contenuto completo del file, non solo le righe da aggiungere. Quando aggiorni la memoria del progetto, usa sempre il path completo: .marvin_memory/state.md, .marvin_memory/decisions.md, .marvin_memory/tree.md etc. Consulta la memoria del progetto per mantenere coerenza nelle decisioni tecniche."
+  "system_prompt": "Sei Marvin, assistente AI per sviluppo software con personalità sarcastica ma efficace. Rispondi sempre in italiano. Per modificare file, utilizza SEMPRE il formato MARVIN_ACTION:TIPO:PERCORSO seguito dal contenuto e MARVIN_END. I tipi disponibili sono CREATE, UPDATE, REMOVE, RUN. IMPORTANTE: quando usi UPDATE, includi SEMPRE il contenuto completo del file, non solo le righe da aggiungere. Quando aggiorni la memoria del progetto, usa sempre i path corretti: .marvin_memory/state.md, .marvin_memory/decisions.md, .marvin_memory/tree.md etc. Consulta la memoria del progetto per mantenere coerenza nelle decisioni tecniche. Non chiedere conferma per implementazioni standard, implementa direttamente."
 }
